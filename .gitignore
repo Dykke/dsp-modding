@@ -1,1 +1,29 @@
+# DSPModding workspace .gitignore
+
+# Private working notes (per new-chat.md)
 cursor-stuff/
+
+# Build output
+**/bin/
+**/obj/
+artifacts/
+
+# IDE
+.vs/
+*.user
+*.suo
+.idea/
+*.swp
+*.tmp
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Never commit game / BepInEx binaries
+BepInEx/
+DSPGAME_Data/
+
+# Local per-machine overrides
+*.local.cfg
