@@ -16,10 +16,11 @@ namespace PlanetwideAmmoSupply
     /// separately) - we intentionally do not depend on that path.
     ///
     /// Throttled by RefillIntervalTicks. Logging (gated behind DebugLog, active
-    /// planet only) is a single aggregate line, further throttled to ~1 per
-    /// LogThrottleTicks and emitted only when ammo actually moved or a turret
-    /// needed ammo none was available for - so a steady, topped-up base is
-    /// silent.
+    /// planet only, ~1 per LogThrottleTicks):
+    ///   - normal: one line only when ammo actually moved (or a turret needed
+    ///     ammo none was available for);
+    ///   - VerboseScan on: a heartbeat every interval showing total/belowCap
+    ///     even when nothing moved, so testing is observable.
     /// </summary>
     [HarmonyPatch(typeof(DefenseSystem), "GameTick", new Type[] { typeof(long), typeof(bool) })]
     internal static class DefenseSystemSupplyPatch
@@ -30,6 +31,9 @@ namespace PlanetwideAmmoSupply
         // Minimum ticks between aggregate log lines (~5s at 60 UPS).
         private const long LogThrottleTicks = 300L;
         private static long _lastLogTick = long.MinValue;
+
+        private struct TurretScan { public int total, belowCap, refilled, movedItems, noStock; }
+        private struct BattleScan { public int bases, slotsRefilled, movedItems; }
 
         static void Postfix(DefenseSystem __instance, long tick, bool isActive)
         {
@@ -46,25 +50,26 @@ namespace PlanetwideAmmoSupply
 
                 float radius = Plugin.SupplyRadius.Value;
 
-                int tRefilled = 0, tMoved = 0, tNoStock = 0, bbMoved = 0;
+                TurretScan ts = default(TurretScan);
+                BattleScan bs = default(BattleScan);
 
-                if (Plugin.SupplyTurrets.Value)
-                    RefillTurrets(__instance, factory, radius, out tRefilled, out tMoved, out tNoStock);
+                if (Plugin.SupplyTurrets.Value) ts = RefillTurrets(__instance, factory, radius);
+                if (Plugin.SupplyBattleBases.Value) bs = RefillBattleBases(__instance, factory, radius);
 
-                if (Plugin.SupplyBattleBases.Value)
-                    RefillBattleBases(__instance, factory, radius, out bbMoved);
+                if (!isActive || !PlanetwideAmmoSupplyLog.IsDebugEnabled()) return;
 
-                // One throttled aggregate line, active planet only, only when
-                // something happened. Steady state is silent.
-                if (isActive && PlanetwideAmmoSupplyLog.IsDebugEnabled()
-                    && (tMoved > 0 || bbMoved > 0 || tNoStock > 0)
-                    && tick - _lastLogTick >= LogThrottleTicks)
+                bool verbose = Plugin.VerboseScan.Value;
+                bool somethingHappened = ts.movedItems > 0 || bs.movedItems > 0 || ts.noStock > 0;
+                if ((verbose || somethingHappened) && tick - _lastLogTick >= LogThrottleTicks)
                 {
                     _lastLogTick = tick;
-                    string msg = "[supply] planet=" + factory.planetId
-                        + " turrets{refilled=" + tRefilled + " items=" + tMoved
-                        + (tNoStock > 0 ? " noStock=" + tNoStock : "") + "}";
-                    if (bbMoved > 0) msg += " battlebase{items=" + bbMoved + "}";
+                    string msg = "[supply] planet=" + factory.planetId + " turrets{"
+                        + (verbose ? "total=" + ts.total + " belowCap=" + ts.belowCap + " " : "")
+                        + "refilled=" + ts.refilled + " items=" + ts.movedItems
+                        + (ts.noStock > 0 ? " noStock=" + ts.noStock : "") + "}";
+                    if (verbose || bs.movedItems > 0)
+                        msg += " battlebase{" + (verbose ? "bases=" + bs.bases + " " : "")
+                            + "items=" + bs.movedItems + "}";
                     PlanetwideAmmoSupplyLog.Info(msg);
                 }
             }
@@ -74,13 +79,12 @@ namespace PlanetwideAmmoSupply
             }
         }
 
-        private static void RefillTurrets(DefenseSystem def, PlanetFactory factory, float radius,
-            out int refilled, out int movedItems, out int noStock)
+        private static TurretScan RefillTurrets(DefenseSystem def, PlanetFactory factory, float radius)
         {
-            refilled = 0; movedItems = 0; noStock = 0;
+            TurretScan r = default(TurretScan);
 
             var pool = def.turrets;
-            if (pool == null || pool.buffer == null) return;
+            if (pool == null || pool.buffer == null) return r;
 
             TurretComponent[] buffer = pool.buffer;
             int cursor = pool.cursor;
@@ -90,7 +94,9 @@ namespace PlanetwideAmmoSupply
             {
                 // Index the array element directly - a struct copy would discard writes.
                 if (buffer[i].id != i) continue;
+                r.total++;
                 if (buffer[i].itemCount >= TurretAmmoTarget) continue;
+                r.belowCap++;
 
                 Vector3 pos = Vector3.zero;
                 int eid = buffer[i].entityId;
@@ -100,13 +106,13 @@ namespace PlanetwideAmmoSupply
                 if (itemId == 0)
                 {
                     itemId = AmmoSourcing.FindAvailableAmmo(factory, buffer[i].ammoType, pos, radius);
-                    if (itemId == 0) { noStock++; continue; }
+                    if (itemId == 0) { r.noStock++; continue; }
                 }
 
                 int want = TurretAmmoTarget - buffer[i].itemCount;
                 int incMoved;
                 int moved = AmmoSourcing.TryPullFromPlanet(factory, itemId, want, pos, radius, out incMoved);
-                if (moved <= 0) { noStock++; continue; }
+                if (moved <= 0) { r.noStock++; continue; }
 
                 if (buffer[i].itemId == 0)
                     buffer[i].SetNewItem(itemId, (short)moved, (short)incMoved);
@@ -116,17 +122,18 @@ namespace PlanetwideAmmoSupply
                     buffer[i].itemInc += (short)incMoved;
                 }
 
-                refilled++;
-                movedItems += moved;
+                r.refilled++;
+                r.movedItems += moved;
             }
+            return r;
         }
 
-        private static void RefillBattleBases(DefenseSystem def, PlanetFactory factory, float radius, out int movedItems)
+        private static BattleScan RefillBattleBases(DefenseSystem def, PlanetFactory factory, float radius)
         {
-            movedItems = 0;
+            BattleScan r = default(BattleScan);
 
             var pool = def.battleBases;
-            if (pool == null || pool.buffer == null) return;
+            if (pool == null || pool.buffer == null) return r;
 
             BattleBaseComponent[] buffer = pool.buffer;
             int cursor = pool.cursor;
@@ -140,6 +147,7 @@ namespace PlanetwideAmmoSupply
                 if (bb == null || bb.id != l) continue;
                 StorageComponent storage = bb.storage;
                 if (storage == null || storage.grids == null) continue;
+                r.bases++;
 
                 Vector3 pos = Vector3.zero;
                 int beid = bb.entityId;
@@ -162,9 +170,11 @@ namespace PlanetwideAmmoSupply
 
                     int remainInc;
                     int accepted = storage.AddItem(itemId, moved, incMoved, out remainInc, false);
-                    movedItems += accepted;
+                    r.slotsRefilled++;
+                    r.movedItems += accepted;
                 }
             }
+            return r;
         }
     }
 }

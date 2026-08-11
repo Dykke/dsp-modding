@@ -43,6 +43,7 @@ namespace PlanetwideAmmoSupply
         internal static ConfigEntry<int> RefillIntervalTicks;
         internal static ConfigEntry<bool> RequireStationSupplyFlag;
         internal static ConfigEntry<string> FighterItemFilter;
+        internal static ConfigEntry<bool> VerboseScan;
         internal static ConfigEntry<bool> DebugLog;
 
         // -- Harmony ---------------------------------------------------------
@@ -85,6 +86,9 @@ namespace PlanetwideAmmoSupply
             FighterItemFilter = Config.Bind(
                 "Advanced", "FighterItemFilter", "",
                 "Optional: restrict which fighter/ammo items battle bases pull (empty = everything the base already accepts).");
+            VerboseScan = Config.Bind(
+                "Advanced", "VerboseScan", false,
+                "Debug aid (needs DebugLog on): log a periodic scan heartbeat on the active planet (~1 per 5s) showing total/belowCap/refilled/noStock even when nothing moved - so you can see it working and why. Off = only log when ammo actually moves.");
 
             // Logging helper.
             PlanetwideAmmoSupplyLog.Init(Logger, DebugLog);
@@ -95,7 +99,8 @@ namespace PlanetwideAmmoSupply
                 + " RefillIntervalTicks=" + RefillIntervalTicks.Value
                 + " RequireStationSupplyFlag=" + RequireStationSupplyFlag.Value
                 + " PreferHighestAmmoTier=" + PreferHighestAmmoTier.Value
-                + " NearestStationFirst=" + NearestStationFirst.Value);
+                + " NearestStationFirst=" + NearestStationFirst.Value
+                + " VerboseScan=" + VerboseScan.Value);
 
             // Harmony. PatchAll is a no-op until the Phase 2/3 patch classes
             // are added under Patches\ - the mod loads and does nothing yet.
