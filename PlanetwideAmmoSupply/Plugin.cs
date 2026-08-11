@@ -71,7 +71,7 @@ namespace PlanetwideAmmoSupply
                 "When auto-filling an EMPTY turret, pick the highest available ammo tier (true) or the lowest/cheapest (false). A turret that already holds an ammo item keeps that item's tier - this only chooses the first fill.");
             SupplyRadius = Config.Bind(
                 "General", "SupplyRadius", 0f,
-                "Max distance (metres) from a structure to an eligible station. 0 = planetwide (any station on the planet).");
+                "Max straight-line distance (metres) from a structure to an eligible station. 0 = planetwide (recommended - matches how PLS/ILS serve a whole planet). Scale: a standard planet is ~200m radius, so distances reach ~400m (opposite side). Rough guide: ~50 = tight cluster, ~150 = large base, ~300 = most of the planet, ~400 = whole standard planet. Small values like 10 are basically 'touching' and will match nothing.");
             NearestStationFirst = Config.Bind(
                 "General", "NearestStationFirst", true,
                 "Pull from the closest eligible station first (true) instead of station build order (false). Pairs naturally with SupplyRadius.");
