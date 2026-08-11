@@ -1,0 +1,127 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Per-mod .csproj. Self-contained: does not depend on any shared
+    MSBuild glue. Each mod is a portable unit that can be moved out of
+    the workspace and still build, provided DSP + BepInEx are installed.
+
+    When copied from the template (cursor-stuff\templates\mod-template\),
+    new-mod.cmd replaces `PlanetwideAmmoSupply` with the mod name and `PlanetwideAmmoSupply`
+    everywhere.
+  -->
+
+  <PropertyGroup>
+
+    <AssemblyName>PlanetwideAmmoSupply</AssemblyName>
+    <RootNamespace>PlanetwideAmmoSupply</RootNamespace>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0.local</InformationalVersion>
+
+    <!-- .NET target. net472 is the BepInEx / DSP requirement. -->
+    <TargetFramework>net472</TargetFramework>
+
+    <!-- C# 7.3 matches DSPMirrorBlueprint and DSPCalculator. -->
+    <LangVersion>7.3</LangVersion>
+
+    <!-- Nullable disabled to match existing DSP mod codebases. -->
+    <Nullable>disable</Nullable>
+
+    <!-- Deterministic builds for reproducible output. -->
+    <Deterministic>true</Deterministic>
+
+    <!-- The mod ships a manual Properties/AssemblyInfo.cs. Disable the
+         SDK's auto-generated AssemblyInfo so the two don't collide
+         (CS0579 duplicate-attribute). -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+    <!-- Game install path. Override per machine with
+         -p:GameRoot="..." or the GAME_ROOT env var. -->
+    <GameRoot Condition="'$(GameRoot)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Dyson Sphere Program</GameRoot>
+    <GameManagedDir>$(GameRoot)\DSPGAME_Data\Managed</GameManagedDir>
+    <BepInExCoreDir>$(GameRoot)\BepInEx\core</BepInExCoreDir>
+
+    <!-- Use the game's bundled mscorlib instead of the SDK's. -->
+    <FrameworkPathOverride Condition="'$(FrameworkPathOverride)' == '' and Exists('$(GameManagedDir)\mscorlib.dll')">$(GameManagedDir)</FrameworkPathOverride>
+
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+  </PropertyGroup>
+
+  <!--
+    Game / BepInEx / Unity references. Private=false: we never copy
+    BepInEx or Unity DLLs into our output directory.
+  -->
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExCoreDir)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCoreDir)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="netstandard">
+      <HintPath>$(GameManagedDir)\netstandard.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GameManagedDir)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameManagedDir)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(GameManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GameManagedDir)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!--
+    Fail the build with a clear message if a required game DLL is
+    missing. Runs before ResolveReferences.
+  -->
+  <Target Name="ValidateGameReferences" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(GameRoot)' == ''" Text="GameRoot is not set. Pass -p:GameRoot=&quot;...&quot; or set the GAME_ROOT env var." />
+    <Error Condition="!Exists('$(GameRoot)')" Text="GameRoot directory does not exist: $(GameRoot)" />
+    <Error Condition="!Exists('$(BepInExCoreDir)\BepInEx.dll')" Text="BepInEx.dll was not found under GameRoot '$(GameRoot)'. Install BepInEx 5 first." />
+    <Error Condition="!Exists('$(BepInExCoreDir)\0Harmony.dll')" Text="0Harmony.dll was not found under GameRoot '$(GameRoot)'. Install BepInEx 5 first." />
+    <Error Condition="!Exists('$(GameManagedDir)\netstandard.dll')" Text="netstandard.dll was not found under GameRoot '$(GameRoot)'." />
+    <Error Condition="!Exists('$(GameManagedDir)\Assembly-CSharp.dll')" Text="Assembly-CSharp.dll was not found under GameRoot '$(GameRoot)'." />
+    <Error Condition="!Exists('$(GameManagedDir)\UnityEngine.dll')" Text="UnityEngine.dll was not found under GameRoot '$(GameRoot)'." />
+    <Error Condition="!Exists('$(GameManagedDir)\UnityEngine.CoreModule.dll')" Text="UnityEngine.CoreModule.dll was not found under GameRoot '$(GameRoot)'." />
+    <Error Condition="!Exists('$(GameManagedDir)\UnityEngine.InputLegacyModule.dll')" Text="UnityEngine.InputLegacyModule.dll was not found under GameRoot '$(GameRoot)'." />
+  </Target>
+
+  <!--
+    PostBuild: copy the built DLL to BepInEx\plugins\<ModName>\ so the
+    developer can launch the game and test without a manual copy.
+    Override the destination by setting the BepInExPluginsDir property.
+
+    Deliberately does NOT deploy the .pdb - Thunderstore releases
+    don't ship debug symbols, and having a stale/mismatched .pdb
+    sitting next to the deployed .dll in a dev BepInEx\plugins\
+    folder is more confusing than helpful. (2026-08-11: this used to
+    copy the .pdb too; removed workspace-wide after it turned up in a
+    deployed plugins folder unexpectedly.)
+  -->
+  <Target Name="DeployToBepInEx" AfterTargets="Build">
+    <PropertyGroup>
+      <BepInExPluginsDir Condition="'$(BepInExPluginsDir)' == ''">$(GameRoot)\BepInEx\plugins\$(AssemblyName)</BepInExPluginsDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(BepInExPluginsDir)" />
+    <ItemGroup>
+      <_DeployFiles Include="$(TargetPath)" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_DeployFiles)" DestinationFolder="$(BepInExPluginsDir)" SkipUnchangedFiles="true" />
+    <Message Text="Deployed $(AssemblyName) -> $(BepInExPluginsDir)" Importance="high" />
+  </Target>
+
+</Project>
