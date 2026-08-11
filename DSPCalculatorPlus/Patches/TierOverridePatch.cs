@@ -1,0 +1,214 @@
+using System;
+using System.Collections;
+using System.Reflection;
+using HarmonyLib;
+
+namespace DSPCalculatorPlus
+{
+    /// <summary>
+    /// Group A - belt / sorter tier override (Phase 2).
+    ///
+    /// Wraps <c>DSPCalculator.Bp.BpConnector.GenerateFullBlueprint</c> (the
+    /// single entry point for one blueprint generation). In the Prefix it
+    /// snapshots the solution's <c>beltsAvailable</c> / <c>sortersAvailable</c>
+    /// candidate lists and replaces each with a filtered copy containing only
+    /// the user's forced tier; the Postfix restores the originals
+    /// unconditionally. Every downstream tier pick in DSPCalculator
+    /// (CalcItemSumInfos, BpBlockProcessor, BpProcessor) reads those two
+    /// lists, so a single wrap forces the tier uniformly - no need to chase
+    /// the inlined pick sites. This mirrors the workspace's
+    /// snapshot-in-Prefix / restore-in-Postfix pattern.
+    ///
+    /// Semantics: forcing a tier keeps ONLY that tier as a candidate, so the
+    /// generator uses it exactly. If a single belt of that tier can't carry
+    /// an item's flow, DSPCalculator's own overflow check (which compares
+    /// against <c>beltsAvailable.Last()</c>, now the forced tier) fires -
+    /// which is where the Phase 3 multi-lane fix takes over.
+    ///
+    /// Everything is reached by reflection - there is no compile-time
+    /// reference to DSPCalculator. If any target member is missing (a
+    /// DSPCalculator version this mod wasn't verified against), the patch is
+    /// not installed and DSPCalculator's stock behaviour is left untouched.
+    /// </summary>
+    internal static class TierOverridePatch
+    {
+        // Resolved once in Apply(); null until then.
+        private static FieldInfo _fSolution;          // BpConnector.solution
+        private static FieldInfo _fBeltsAvailable;    // SolutionTree.beltsAvailable
+        private static FieldInfo _fSortersAvailable;  // SolutionTree.sortersAvailable
+        private static FieldInfo _fBeltItemId;        // BpBeltInfo.itemId
+        private static FieldInfo _fSorterGrade;       // BpSorterInfo.grade
+        private static FieldInfo _fBeltsAscending;    // static BpDB.beltsAscending
+        private static bool _ready;
+
+        /// <summary>
+        /// Resolves the DSPCalculator targets and installs the patch. Safe to
+        /// call once from Plugin.Awake (DSPCalculator is a hard dependency, so
+        /// it is already loaded). No-op with a warning if anything is missing.
+        /// </summary>
+        public static void Apply(Harmony harmony)
+        {
+            var tConnector = AccessTools.TypeByName("DSPCalculator.Bp.BpConnector");
+            if (tConnector == null)
+            {
+                DSPCalculatorPlusLog.Warn("[tier] BpConnector not found - tier override disabled (DSPCalculator missing or renamed).");
+                return;
+            }
+
+            var target = AccessTools.Method(tConnector, "GenerateFullBlueprint");
+            if (target == null)
+            {
+                DSPCalculatorPlusLog.Warn("[tier] BpConnector.GenerateFullBlueprint not found - tier override disabled.");
+                return;
+            }
+
+            var tBeltInfo = AccessTools.TypeByName("DSPCalculator.Bp.BpBeltInfo");
+            var tSorterInfo = AccessTools.TypeByName("DSPCalculator.Bp.BpSorterInfo");
+            var tBpDB = AccessTools.TypeByName("DSPCalculator.Bp.BpDB");
+
+            _fSolution = AccessTools.Field(tConnector, "solution");
+            var tSolution = _fSolution?.FieldType;
+            _fBeltsAvailable = tSolution != null ? AccessTools.Field(tSolution, "beltsAvailable") : null;
+            _fSortersAvailable = tSolution != null ? AccessTools.Field(tSolution, "sortersAvailable") : null;
+            _fBeltItemId = tBeltInfo != null ? AccessTools.Field(tBeltInfo, "itemId") : null;
+            _fSorterGrade = tSorterInfo != null ? AccessTools.Field(tSorterInfo, "grade") : null;
+            _fBeltsAscending = tBpDB != null ? AccessTools.Field(tBpDB, "beltsAscending") : null;
+
+            if (_fSolution == null || _fBeltsAvailable == null || _fSortersAvailable == null
+                || _fBeltItemId == null || _fSorterGrade == null || _fBeltsAscending == null)
+            {
+                DSPCalculatorPlusLog.Error("[tier] one or more DSPCalculator members not found - tier override disabled. "
+                    + "solution=" + (_fSolution != null) + " belts=" + (_fBeltsAvailable != null)
+                    + " sorters=" + (_fSortersAvailable != null) + " beltItemId=" + (_fBeltItemId != null)
+                    + " sorterGrade=" + (_fSorterGrade != null) + " beltsAscending=" + (_fBeltsAscending != null));
+                return;
+            }
+
+            _ready = true;
+            harmony.Patch(target,
+                prefix: new HarmonyMethod(typeof(TierOverridePatch), nameof(Prefix)),
+                postfix: new HarmonyMethod(typeof(TierOverridePatch), nameof(Postfix)) { priority = Priority.VeryHigh });
+            DSPCalculatorPlusLog.Info("[tier] Group A patch installed on BpConnector.GenerateFullBlueprint.");
+        }
+
+        // __state (when non-null) = { solution, originalBelts-or-null, originalSorters-or-null }.
+        private static void Prefix(object __instance, out object[] __state)
+        {
+            __state = null;
+            if (!_ready || __instance == null) return;
+
+            var cfg = Plugin.Config;
+            BeltTier beltTier = cfg.BeltTierOverride.Value;
+            SorterTier sorterTier = cfg.SorterTierOverride.Value;
+            if (beltTier == BeltTier.Auto && sorterTier == SorterTier.Auto) return;
+
+            object solution = _fSolution.GetValue(__instance);
+            if (solution == null) return;
+
+            object originalBelts = null;
+            object originalSorters = null;
+
+            if (beltTier != BeltTier.Auto)
+            {
+                var current = _fBeltsAvailable.GetValue(solution) as IList;
+                var filtered = FilterBeltsToTier(current, (int)beltTier);
+                if (filtered != null)
+                {
+                    originalBelts = current;
+                    _fBeltsAvailable.SetValue(solution, filtered);
+                }
+            }
+
+            if (sorterTier != SorterTier.Auto)
+            {
+                var current = _fSortersAvailable.GetValue(solution) as IList;
+                var filtered = FilterSortersToGrade(current, (int)sorterTier);
+                if (filtered != null)
+                {
+                    originalSorters = current;
+                    _fSortersAvailable.SetValue(solution, filtered);
+                }
+            }
+
+            if (originalBelts != null || originalSorters != null)
+                __state = new object[] { solution, originalBelts, originalSorters };
+        }
+
+        private static void Postfix(object[] __state)
+        {
+            if (__state == null) return;
+            object solution = __state[0];
+            object originalBelts = __state[1];
+            object originalSorters = __state[2];
+            if (originalBelts != null) _fBeltsAvailable.SetValue(solution, originalBelts);
+            if (originalSorters != null) _fSortersAvailable.SetValue(solution, originalSorters);
+        }
+
+        /// <summary>
+        /// Returns a new list (same runtime type as <paramref name="current"/>)
+        /// keeping only the belt whose tier == MkN, mapped via
+        /// BpDB.beltsAscending[N-1]. Returns null (leave Auto) if the tier is
+        /// out of range or not present in the currently-available belts (e.g.
+        /// locked under DSPCalculator's tech limit).
+        /// </summary>
+        private static IList FilterBeltsToTier(IList current, int tier)
+        {
+            if (current == null || current.Count == 0) return null;
+
+            var ascending = _fBeltsAscending.GetValue(null) as IList;
+            int idx = tier - 1;
+            if (ascending == null || idx < 0 || idx >= ascending.Count)
+            {
+                DSPCalculatorPlusLog.Warn("[tier] belt Mk" + tier + " is out of range (only "
+                    + (ascending == null ? 0 : ascending.Count) + " belt tiers exist) - leaving belt tier on Auto.");
+                return null;
+            }
+
+            int forcedItemId = (int)_fBeltItemId.GetValue(ascending[idx]);
+            var filtered = (IList)Activator.CreateInstance(current.GetType());
+            foreach (var b in current)
+            {
+                if ((int)_fBeltItemId.GetValue(b) == forcedItemId)
+                    filtered.Add(b);
+            }
+
+            if (filtered.Count == 0)
+            {
+                DSPCalculatorPlusLog.Warn("[tier] belt Mk" + tier + " (itemId " + forcedItemId
+                    + ") is not in the available belts (locked under tech limit?) - leaving belt tier on Auto.");
+                return null;
+            }
+
+            DSPCalculatorPlusLog.Info("[tier] belt forced to Mk" + tier + " (itemId " + forcedItemId + ").");
+            return filtered;
+        }
+
+        /// <summary>
+        /// Returns a new list (same runtime type as <paramref name="current"/>)
+        /// keeping only sorters whose grade == N (grade &gt;= 4 for Mk4 /
+        /// pile). Returns null (leave Auto) if no such sorter is available.
+        /// </summary>
+        private static IList FilterSortersToGrade(IList current, int tier)
+        {
+            if (current == null || current.Count == 0) return null;
+
+            var filtered = (IList)Activator.CreateInstance(current.GetType());
+            foreach (var s in current)
+            {
+                int grade = (int)_fSorterGrade.GetValue(s);
+                bool match = tier >= 4 ? grade >= 4 : grade == tier;
+                if (match) filtered.Add(s);
+            }
+
+            if (filtered.Count == 0)
+            {
+                DSPCalculatorPlusLog.Warn("[tier] sorter Mk" + tier + " is not in the available sorters "
+                    + "(locked under tech limit?) - leaving sorter tier on Auto.");
+                return null;
+            }
+
+            DSPCalculatorPlusLog.Info("[tier] sorter forced to Mk" + tier + ".");
+            return filtered;
+        }
+    }
+}

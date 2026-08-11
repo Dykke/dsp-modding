@@ -1,0 +1,10 @@
+{
+  "name": "DSPCalculatorPlus",
+  "version_number": "1.0.0",
+  "website_url": "https://github.com/Dykke/dsp-modding",
+  "description": "DSPCalculator companion: force a specific belt/sorter tier and generate blueprints for high-throughput items via multi-lane splitting.",
+  "dependencies": [
+    "xiaoye97-BepInEx-5.4.17",
+    "jinxOAO-DSPCalculator-0.5.25"
+  ]
+}
