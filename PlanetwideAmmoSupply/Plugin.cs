@@ -138,8 +138,7 @@ namespace PlanetwideAmmoSupply
             // Methods we intend to patch: {typeName, methodName}.
             string[][] methods =
             {
-                new[] { "DefenseSystem", "GameTick_Turret" },
-                new[] { "BattleBaseComponent", "InternalUpdate" },
+                new[] { "DefenseSystem", "GameTick" },
                 new[] { "StorageComponent", "AddItem" },
             };
             foreach (var t in methods)
