@@ -4,7 +4,7 @@
 > replacement for the DSP Infinite Resource Nodes IL-patcher mod, with
 > added ILS / PLS coverage.
 
-**Author:** `author` (TODO before publish)
+**Author:** `zicarius`
 **Version:** 1.0.0
 **Game:** Dyson Sphere Program 0.9.27+ and 0.10.33+
 **Loader:** BepInEx 5.4.17+
@@ -50,11 +50,11 @@ the same amount per tick, but the source never depletes.
 
 1. Install [BepInEx 5 for Dyson Sphere Program](https://thunderstore.io/c/dyson-sphere-program/p/xiaoye97/BepInEx/).
 2. Download the latest `EndlessResources-<version>.zip` from the
-   [Releases page](https://github.com/author/EndlessResources/releases).
+   [Releases page](https://github.com/Dykke/dsp-modding/releases).
 3. Extract the ZIP into your `Dyson Sphere Program` folder so the
    `plugins\` path lands inside `BepInEx\plugins\`.
 4. Launch the game once. BepInEx will create
-   `BepInEx\config\com.author.EndlessResources.cfg` with the
+   `BepInEx\config\com.zicarius.EndlessResources.cfg` with the
    defaults.
 5. (Optional) Edit that .cfg to taste.
 
@@ -77,8 +77,13 @@ the same amount per tick, but the source never depletes.
   defensive reflection).
 - **DSP Infinite Resource Nodes:** incompatible by design. This mod
   replaces it. Both installed = redundant but not crashing.
-- **PlanetMinerFast:** compatible (mutually exclusive goal:
-  speed vs amount).
+- **PlanetMinerFast:** compatible via a dedicated compat layer
+  (`Patches\PlanetMinerFastCompat.cs`, gated by
+  `EnablePlanetMinerFastCompatFlag`, default `true`). PlanetMinerFast
+  depletes vein amounts directly from its own slow-tick handler,
+  bypassing `MinerComponent.InternalUpdate` entirely - without the
+  compat layer the vein would still slowly drain even with this mod
+  installed. Confirmed working in-game as of 2026-08-11.
 - **StacksizeMultiplier:** compatible (orthogonal).
 - **MaxLVLIncrease:** compatible (orthogonal).
 - **CommonAPI:** not used in v1. Will be required for v1.1's
@@ -97,7 +102,7 @@ MIT. See `LICENSE` for the full text.
 
 ## Credits
 
-- `EndlessResources` by `author` (TODO before publish).
+- `EndlessResources` by `zicarius`.
 - Built on the workspace template at `cursor-stuff\templates\mod-template\`.
 - Replaces and extends
   [DSP Infinite Resource Nodes](https://dsp.thunderstore.io/package/GreyHak/DSP_Infinite_Resource_Nodes/)

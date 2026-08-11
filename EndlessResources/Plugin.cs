@@ -17,7 +17,7 @@ namespace EndlessResources
     ///
     /// Each feature is gated by a config toggle in
     /// <see cref="PluginConfig"/>. See the README.md or the
-    /// auto-generated BepInEx\config\com.author.EndlessResources.cfg
+    /// auto-generated BepInEx\config\com.zicarius.EndlessResources.cfg
     /// for details.
     /// </summary>
     [BepInPlugin(GUID, NAME, VERSION)]
@@ -25,7 +25,7 @@ namespace EndlessResources
     public sealed class Plugin : BaseUnityPlugin
     {
         // ----- mod identity -------------------------------------------------
-        public const string GUID = "com.author.EndlessResources"; // TODO: replace `author` with the real namespace before publish
+        public const string GUID = "com.zicarius.EndlessResources";
         public const string NAME = "EndlessResources";
         public const string VERSION = "1.0.0";
 
