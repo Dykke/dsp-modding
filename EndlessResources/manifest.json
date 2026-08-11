@@ -1,0 +1,9 @@
+{
+    "name": "EndlessResources",
+    "version_number": "1.0.0",
+    "website_url": "https://github.com/author/EndlessResources",
+    "description": "All planet veins stay full. All ILS / PLS source storage stays full. Modern Harmony plugin replacing DSP Infinite Resource Nodes, with added ILS / PLS coverage. Per-source toggles, gated debug log.",
+    "dependencies": [
+        "xiaoye97-BepInEx-5.4.17"
+    ]
+}

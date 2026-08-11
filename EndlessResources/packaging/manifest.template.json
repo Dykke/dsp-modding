@@ -1,0 +1,9 @@
+{
+    "name": "EndlessResources",
+    "version_number": "1.0.0",
+    "website_url": "https://github.com/author/EndlessResources",
+    "description": "All veins stay full. All logistics buffers stay full. Replaces DSP Infinite Resource Nodes with a modern Harmony plugin and adds ILS / PLS support. Per-source toggles, gated debug log.",
+    "dependencies": [
+        "xiaoye97-BepInEx-5.4.17"
+    ]
+}
