@@ -124,4 +124,41 @@
     <Message Text="Deployed $(AssemblyName) -> $(BepInExPluginsDir)" Importance="high" />
   </Target>
 
+  <!--
+    PostBuild: also deploy to an r2modman profile when R2ModmanProfilePath
+    (env: R2MODMAN_PROFILE_PATH) is set. Deploys the DLL only (no .pdb),
+    matching DeployToBepInEx.
+  -->
+  <Target Name="DeployToR2Modman" AfterTargets="DeployToBepInEx" Condition="'$(R2ModmanProfilePath)' != ''">
+    <PropertyGroup>
+      <_R2ModmanPluginsDir>$(R2ModmanProfilePath)\BepInEx\plugins\$(AssemblyName)</_R2ModmanPluginsDir>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(R2ModmanProfilePath)')" Text="R2ModmanProfilePath does not exist: $(R2ModmanProfilePath)" />
+    <MakeDir Directories="$(_R2ModmanPluginsDir)" />
+    <ItemGroup>
+      <_R2ModmanDeployFiles Include="$(TargetPath)" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_R2ModmanDeployFiles)" DestinationFolder="$(_R2ModmanPluginsDir)" SkipUnchangedFiles="true" />
+    <Message Text="Deployed $(AssemblyName) -> $(_R2ModmanPluginsDir)" Importance="high" />
+  </Target>
+
+  <!--
+    PostBuild: deploy r2modman metadata (manifest.json + README.md) next to
+    the DLL, to the game plugins dir and (if set) the r2modman profile. Each
+    file is Exists()-guarded so a freshly scaffolded mod without a top-level
+    manifest.json still builds (the manifest is produced at packaging time).
+  -->
+  <Target Name="DeployMetadata" AfterTargets="DeployToR2Modman">
+    <ItemGroup>
+      <_MetadataFiles Include="$(MSBuildThisFileDirectory)manifest.json" Condition="Exists('$(MSBuildThisFileDirectory)manifest.json')" />
+      <_MetadataFiles Include="$(MSBuildThisFileDirectory)README.md" Condition="Exists('$(MSBuildThisFileDirectory)README.md')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_MetadataFiles)" DestinationFolder="$(BepInExPluginsDir)" SkipUnchangedFiles="true" Condition="'@(_MetadataFiles)' != ''" />
+    <Copy SourceFiles="@(_MetadataFiles)"
+          DestinationFolder="$(R2ModmanProfilePath)\BepInEx\plugins\$(AssemblyName)"
+          SkipUnchangedFiles="true"
+          Condition="'$(R2ModmanProfilePath)' != '' and '@(_MetadataFiles)' != ''" />
+    <Message Text="Deployed metadata for $(AssemblyName)" Importance="high" Condition="'@(_MetadataFiles)' != ''" />
+  </Target>
+
 </Project>
