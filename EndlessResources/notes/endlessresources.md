@@ -6,6 +6,48 @@ Per the workspace convention, newest entries go on top.
 
 ---
 
+## 2026-08-11 - PlanetMinerFast compat never applied: fixed the retry timing
+
+**Symptom.** In-game, the vein amount kept slowly draining despite
+Patch A (`MinerComponent.InternalUpdate`) firing every tick and
+logging a successful restore (`restored=112`). The debug log's
+`firstAmt` field crept steadily down across a whole session
+(1059 → 1033) instead of holding constant. `LogOutput.log` showed:
+`[compat] PlanetMinerFast not detected; skipping compat patch.`
+
+**Root cause.** `PlanetMinerFast` (another installed mod) bypasses
+`MinerComponent.InternalUpdate` entirely - it depletes
+`veinPool[].amount` directly from its own `OnSlowTick` handler. The
+compat layer (`Patches\PlanetMinerFastCompat.cs`) exists to
+snapshot/restore around that call, but its runtime detection of the
+`PlanetMinerFast` plugin type only ran once, in `Plugin.Awake()`.
+BepInEx loads plugins alphabetically, so `PlanetMinerFast` ("P")
+hasn't loaded yet when `EndlessResources` ("E") runs its `Awake()` -
+detection always missed.
+
+A prior session tried two fixes and got stuck on both before running
+out of usage credits: patching `GameMain.Awake` (doesn't exist under
+that name, `CS0117`), then a coroutine-based retry that was never
+actually wired up in `Plugin.cs` (the `PlanetMinerFastCompatRetry`
+class was left as a dead, empty stub with no method body).
+
+**Fix.** Retry the detection from `Plugin.Start()` instead - Unity
+guarantees every plugin's `Awake()` completes before any plugin's
+`Start()` runs, so by then `PlanetMinerFast` is loaded and
+detectable regardless of alphabetical order. Renamed
+`RetryFromGameMainAwake()` → `Retry()`, removed the dead stub class,
+added the `Start()` call in `Plugin.cs`. Build verified clean and
+deployed; full mechanism + generalized pattern for future mods is in
+`cursor-stuff\notes\harmony-patterns.md` (also promoted to a
+workspace-wide standing rule in `cursor-stuff\new-chat.md` since any
+future compat layer in this workspace will hit the same load-order
+issue).
+
+**Still to verify in-game:** launch DSP and confirm the log now
+shows `[compat] PlanetMinerFast detected; applied snapshot/restore
+patch...` and that `firstAmt` in Patch A's log holds constant instead
+of decreasing.
+
 ## 2026-08-11 - Mod scaffolded
 
 - Plan produced via `dsp-mod-plan` skill, written to

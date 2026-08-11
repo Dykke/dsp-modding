@@ -49,12 +49,14 @@ namespace EndlessResources
     /// order. EndlessResources ("E") loads before PlanetMinerFast
     /// ("P"), so at our <c>Awake</c> the PlanetMinerFast type isn't
     /// in any loaded assembly yet and the first detection returns
-    /// null. The retry happens in
-    /// <see cref="GameMainAwakeCompatPatch"/> below, which is a
-    /// Harmony postfix on <c>GameMain.Awake</c> (Unity method called
-    /// after all BepInEx plugins are loaded). At that point,
-    /// PlanetMinerFast is in <see cref="AppDomain.CurrentDomain"/>
-    /// and detection succeeds.
+    /// null. The retry happens in <see cref="Retry"/>, called from
+    /// <c>Plugin.Start()</c>. Unity guarantees every component's
+    /// <c>Awake()</c> runs before any component's <c>Start()</c>, and
+    /// BepInEx instantiates every plugin's component before the first
+    /// frame - so by the time our <c>Start()</c> runs, PlanetMinerFast's
+    /// <c>Awake()</c> has already executed and its assembly is in
+    /// <see cref="AppDomain.CurrentDomain"/>. No coroutine or extra
+    /// Harmony patch needed.
     /// </para>
     ///
     /// <para>
@@ -99,16 +101,15 @@ namespace EndlessResources
         }
 
         /// <summary>
-        /// Retry the compat detection. Called from the
-        /// <c>GameMain.Awake</c> postfix (see
-        /// <see cref="GameMainAwakeCompatPatch"/>) after all BepInEx
-        /// plugins are loaded.
+        /// Retry the compat detection. Called from <c>Plugin.Start()</c>,
+        /// which Unity guarantees runs after every plugin's <c>Awake()</c>
+        /// has completed.
         /// </summary>
-        public static void RetryFromGameMainAwake()
+        public static void Retry()
         {
             if (_storedHarmony == null)
             {
-                EndlessResourcesLog.Warn("[compat] RetryFromGameMainAwake called before Apply; skipping.");
+                EndlessResourcesLog.Warn("[compat] Retry called before Apply; skipping.");
                 return;
             }
             TryApply();
@@ -133,7 +134,7 @@ namespace EndlessResources
                 {
                     if (!_loggedNotDetected)
                     {
-                        EndlessResourcesLog.Info("[compat] PlanetMinerFast not detected yet; will retry on GameMain.Awake.");
+                        EndlessResourcesLog.Info("[compat] PlanetMinerFast not detected yet; will retry on Start.");
                         _loggedNotDetected = true;
                     }
                     return;
@@ -274,26 +275,5 @@ namespace EndlessResources
                 EndlessResourcesLog.Error("[compat] RestorePostfix threw: " + ex);
             }
         }
-    }
-
-    /// <summary>
-    /// Defers <see cref="PlanetMinerFastCompat"/> detection until
-    /// after all BepInEx plugins are loaded. We use a coroutine
-    /// started from <see cref="Plugin.Awake"/> instead of patching
-    /// <c>GameMain.Awake</c> because Unity magic methods
-    /// (<c>Awake</c>, <c>Start</c>, <c>Update</c>) are not always
-    /// visible to Harmony's <c>nameof</c>-based patch attribute
-    /// (they may be defined in the base class or not present in the
-    /// type metadata). The coroutine waits a few hundred ms, by
-    /// which time the BepInEx chainloader has finished and all
-    /// plugin assemblies are in <see cref="AppDomain.CurrentDomain"/>.
-    /// </summary>
-    [HarmonyPatch]
-    internal static class PlanetMinerFastCompatRetry
-    {
-        // The coroutine is owned by the Plugin (BaseUnityPlugin) so we
-        // don't have a separate MonoBehaviour here. The Plugin starts
-        // the coroutine in its Awake; this class only contains the
-        // public entry point for the coroutine to call.
     }
 }

@@ -72,8 +72,11 @@ namespace EndlessResources
                 EndlessResourcesLog.Info("[patch] Applied " + n + " Harmony patches: MinerPatch, IcarusPatch, StationVeinCollectionPatch, StationDispatchPatch.");
 
                 // 3a. Compat layer for PlanetMinerFast. Detected via
-                //     reflection; no-op if not installed. See
-                //     Patches\PlanetMinerFastCompat.cs for rationale.
+                //     reflection; no-op if not installed. BepInEx loads
+                //     plugins alphabetically, so PlanetMinerFast ("P")
+                //     isn't loaded yet at our Awake ("E") - this first
+                //     attempt is expected to miss. The real attempt
+                //     happens in Start() (see Patches\PlanetMinerFastCompat.cs).
                 if (Config.EnablePlanetMinerFastCompatFlag.Value)
                 {
                     PlanetMinerFastCompat.Apply(_harmony);
@@ -125,6 +128,18 @@ namespace EndlessResources
                 {
                     EndlessResourcesLog.Error("[diag] Failed to inspect " + t[0] + "." + t[1] + ": " + ex.Message);
                 }
+            }
+        }
+
+        private void Start()
+        {
+            // Unity guarantees every component's Awake() runs before any
+            // component's Start(). By now every other BepInEx plugin
+            // (including PlanetMinerFast) has finished its Awake(), so
+            // this retry reliably finds it regardless of load order.
+            if (Config.EnablePlanetMinerFastCompatFlag.Value)
+            {
+                PlanetMinerFastCompat.Retry();
             }
         }
 
