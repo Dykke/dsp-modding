@@ -84,10 +84,26 @@ namespace PlanetwideAmmoSupply
             if (idx <= 0 || ItemProto.turretNeeds == null || idx >= ItemProto.turretNeeds.Length) return 0;
             int[] needs = ItemProto.turretNeeds[idx];
             if (needs == null) return 0;
-            for (int n = 0; n < needs.Length; n++)
+
+            // needs[] is built by ItemProto.InitTurretNeeds in item-id order
+            // (ascending), zero-padded at the tail. For DSP ammo, higher id ==
+            // higher tier, so "prefer highest" scans from the end backward and
+            // "prefer lowest/cheapest" scans forward.
+            if (Plugin.PreferHighestAmmoTier.Value)
             {
-                int candidate = needs[n];
-                if (candidate > 0 && HasStock(factory, candidate, pos, radius)) return candidate;
+                for (int n = needs.Length - 1; n >= 0; n--)
+                {
+                    int candidate = needs[n];
+                    if (candidate > 0 && HasStock(factory, candidate, pos, radius)) return candidate;
+                }
+            }
+            else
+            {
+                for (int n = 0; n < needs.Length; n++)
+                {
+                    int candidate = needs[n];
+                    if (candidate > 0 && HasStock(factory, candidate, pos, radius)) return candidate;
+                }
             }
             return 0;
         }

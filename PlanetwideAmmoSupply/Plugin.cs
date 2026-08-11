@@ -37,6 +37,7 @@ namespace PlanetwideAmmoSupply
         internal static ConfigEntry<bool> Enabled;
         internal static ConfigEntry<bool> SupplyTurrets;
         internal static ConfigEntry<bool> SupplyBattleBases;
+        internal static ConfigEntry<bool> PreferHighestAmmoTier;
         internal static ConfigEntry<float> SupplyRadius;
         internal static ConfigEntry<int> RefillIntervalTicks;
         internal static ConfigEntry<bool> RequireStationSupplyFlag;
@@ -63,6 +64,9 @@ namespace PlanetwideAmmoSupply
             SupplyBattleBases = Config.Bind(
                 "General", "SupplyBattleBases", true,
                 "Auto-refill battle-base ammo and fighters from the planet's logistics stations.");
+            PreferHighestAmmoTier = Config.Bind(
+                "General", "PreferHighestAmmoTier", true,
+                "When auto-filling an EMPTY turret, pick the highest available ammo tier (true) or the lowest/cheapest (false). A turret that already holds an ammo item keeps that item's tier - this only chooses the first fill.");
             SupplyRadius = Config.Bind(
                 "General", "SupplyRadius", 0f,
                 "Max distance (metres) from a structure to an eligible station. 0 = planetwide (any station on the planet).");
@@ -85,7 +89,8 @@ namespace PlanetwideAmmoSupply
                 + " SupplyBattleBases=" + SupplyBattleBases.Value
                 + " SupplyRadius=" + SupplyRadius.Value
                 + " RefillIntervalTicks=" + RefillIntervalTicks.Value
-                + " RequireStationSupplyFlag=" + RequireStationSupplyFlag.Value);
+                + " RequireStationSupplyFlag=" + RequireStationSupplyFlag.Value
+                + " PreferHighestAmmoTier=" + PreferHighestAmmoTier.Value);
 
             // Harmony. PatchAll is a no-op until the Phase 2/3 patch classes
             // are added under Patches\ - the mod loads and does nothing yet.
