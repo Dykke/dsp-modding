@@ -1,4 +1,4 @@
-﻿# EndlessResources
+# EndlessResources
 
 > All veins stay full. All logistics buffers stay full. A modern Harmony
 > replacement for the DSP Infinite Resource Nodes IL-patcher mod, with
@@ -9,13 +9,7 @@
 **Game:** Dyson Sphere Program 0.9.27+ and 0.10.33+
 **Loader:** BepInEx 5.4.17+
 
-EndlessResources makes planet resources non-depleting regardless of
-who consumes them. Every miner, oil extractor, Icarus hand-mine, and
-ILS / PLS vein collector or source station leaves the source's amount
-unchanged. It is a standalone replacement for the
-[DSP Infinite Resource Nodes](https://dsp.thunderstore.io/package/GreyHak/DSP_Infinite_Resource_Nodes/)
-mod (which uses a fragile Mono.Cecil IL patcher that has needed 6
-version-fix updates) and adds the ILS / PLS coverage that mod lacks.
+For players who never want to worry about a vein running dry.
 
 ---
 
@@ -41,6 +35,10 @@ the same amount per tick, but the source never depletes.
   station pulls from a planet vein.
 - **ILS / PLS source storage** - source station's storage buffer
   restored after a dispatch.
+- **PlanetMinerFast compatibility** - a dedicated compat layer keeps
+  veins full even when PlanetMinerFast is installed, which otherwise
+  depletes them from its own slow-tick handler outside this mod's
+  reach.
 - **Per-source toggles** - enable or disable each source type
   independently. Default: all on.
 - **Gated debug log** - verbose diagnostic logging via the
@@ -48,6 +46,13 @@ the same amount per tick, but the source never depletes.
 
 ## Installation
 
+**Via r2modman / Thunderstore Mod Manager (recommended):**
+1. Install [r2modman](https://thunderstore.io/package/ebkr/r2modman/) or the Thunderstore Mod Manager.
+2. Search "Dyson Sphere Program" and set up a profile.
+3. Search "EndlessResources" in the Online tab and install.
+4. Launch the game through the mod manager.
+
+**Manual install:**
 1. Install [BepInEx 5 for Dyson Sphere Program](https://thunderstore.io/c/dyson-sphere-program/p/xiaoye97/BepInEx/).
 2. Download the latest `EndlessResources-<version>.zip` from the
    [Releases page](https://github.com/Dykke/dsp-modding/releases).
@@ -58,7 +63,28 @@ the same amount per tick, but the source never depletes.
    defaults.
 5. (Optional) Edit that .cfg to taste.
 
+## Before you install
+
+This is a BepInEx plugin - it patches the game's code at runtime
+using Harmony postfixes (a snapshot-and-restore pattern, not IL
+rewriting).
+
+- **Only download from sources you trust.** Only this mod's
+  Thunderstore page or the
+  [GitHub repo](https://github.com/Dykke/dsp-modding) - treat
+  re-uploads elsewhere as unsafe.
+- **Game updates can break it.** A DSP update may stop this mod from
+  working until a compatibility update is released. If the game
+  misbehaves after an update, disable this mod first and check back.
+- **Back up your save first.** This mod does not write custom data
+  to your save - it only restores in-memory vein/storage values each
+  tick - but a backup before enabling any new mod is good practice
+  regardless.
+
 ## Configuration
+
+All settings live in the BepInEx config file - there is no in-game
+settings window.
 
 | Setting | Default | Description |
 |---|---|---|
@@ -67,6 +93,7 @@ the same amount per tick, but the source never depletes.
 | `General > EnableIcarusPatchFlag` | `true` | Restore vein amount after Icarus hand-mine. |
 | `General > EnableILSVeinCollectionFlag` | `true` | Restore vein amount after ILS / PLS vein collection. |
 | `General > EnableILSSourceFlag` | `true` | Restore source ILS / PLS storage after dispatch. |
+| `General > EnablePlanetMinerFastCompatFlag` | `true` | Also restore veins that PlanetMinerFast depletes from its own slow-tick handler. No-op if PlanetMinerFast isn't installed. |
 | `Diagnostics > DebugLog` | `false` | Verbose logging, off by default. |
 
 (Full reference: see the .cfg file BepInEx writes on first run.)
@@ -83,18 +110,36 @@ the same amount per tick, but the source never depletes.
   depletes vein amounts directly from its own slow-tick handler,
   bypassing `MinerComponent.InternalUpdate` entirely - without the
   compat layer the vein would still slowly drain even with this mod
-  installed. Confirmed working in-game as of 2026-08-11.
+  installed. Confirmed working in-game.
 - **StacksizeMultiplier:** compatible (orthogonal).
 - **MaxLVLIncrease:** compatible (orthogonal).
 - **CommonAPI:** not used in v1. Will be required for v1.1's
   in-game window.
-- **Multiplayer:** untested in MP. Vein / storage state is per-planet
-  and the patches are per-tick - should work but is not confirmed.
+- **Multiplayer:** untested in Nebula multiplayer. Vein / storage
+  state is per-planet and the patches are per-tick - should work but
+  is not confirmed.
+
+## Troubleshooting
+
+**Mod doesn't load:**
+- Ensure the file is in `BepInEx\plugins\EndlessResources\` (not `Mods\`).
+- Check `BepInEx\LogOutput.log` for errors near `Loading [EndlessResources]`.
+
+**Vein or ILS/PLS storage still depletes:**
+- Turn on `Diagnostics > DebugLog` and check `BepInEx\LogOutput.log`
+  for `[patch] Patch A fired` (or the relevant patch letter) - if it
+  never appears, that patch isn't applying.
+- If PlanetMinerFast is installed, confirm the log shows
+  `[compat] PlanetMinerFast detected; applied snapshot/restore
+  patch...` rather than `not detected` - if it says "not detected"
+  after the game has fully loaded, PlanetMinerFast likely isn't
+  actually running, or its internal method signature changed.
 
 ## Screenshots
 
-(TODO before publish. Warm-palette Forge / Vault / Botanical theme
-per the user's branding preference. Avoid "AI slop" bright cyan.)
+Not yet added - pending real in-game captures. Icon/thumbnail is
+final (warm gold/bronze, Vault theme, see
+`non-code\LOGO_PROMPT.md`).
 
 ## License
 
@@ -107,3 +152,14 @@ MIT. See `LICENSE` for the full text.
 - Replaces and extends
   [DSP Infinite Resource Nodes](https://dsp.thunderstore.io/package/GreyHak/DSP_Infinite_Resource_Nodes/)
   by GreyHak (BSD 3 clause).
+
+### Support
+
+All my mods are free and always will be. If this one made your
+playthrough better and you feel like buying me a coffee, that keeps
+me motivated to maintain these mods and build new ones:
+[https://ko-fi.com/zicarius](https://ko-fi.com/zicarius)
+
+---
+
+**NEVER RUN DRY!**

@@ -8,6 +8,10 @@ cursor-stuff/
 */notes/
 */non-code/
 
+# Maintainer-only packaging notes (never shipped in the zip, unlike
+# packaging/README.md which is the real player-facing content).
+PACKAGING_NOTES.md
+
 # Build output
 **/bin/
 **/obj/
