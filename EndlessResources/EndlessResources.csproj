@@ -115,9 +115,16 @@
   </Target>
 
   <!--
-    PostBuild: copy the built DLL + PDB to BepInEx\plugins\<ModName>\ so
-    the developer can launch the game and test without a manual copy.
+    PostBuild: copy the built DLL to BepInEx\plugins\<ModName>\ so the
+    developer can launch the game and test without a manual copy.
     Override the destination by setting the BepInExPluginsDir property.
+
+    Deliberately does NOT deploy the .pdb - Thunderstore releases
+    don't ship debug symbols, and having a stale/mismatched .pdb
+    sitting next to the deployed .dll in a dev BepInEx\plugins\
+    folder is more confusing than helpful. (2026-08-11: this used to
+    copy the .pdb too; removed after it turned up in a deployed
+    plugins folder unexpectedly.)
   -->
   <Target Name="DeployToBepInEx" AfterTargets="Build">
     <PropertyGroup>
@@ -126,15 +133,15 @@
     <MakeDir Directories="$(BepInExPluginsDir)" />
     <ItemGroup>
       <_DeployFiles Include="$(TargetPath)" />
-      <_DeployFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
     </ItemGroup>
     <Copy SourceFiles="@(_DeployFiles)" DestinationFolder="$(BepInExPluginsDir)" SkipUnchangedFiles="true" />
     <Message Text="Deployed $(AssemblyName) -> $(BepInExPluginsDir)" Importance="high" />
   </Target>
 
   <!--
-    PostBuild (optional): also deploy the DLL + PDB to a r2modman
-    profile's BepInEx\plugins\ folder. Fires after DeployToBepInEx.
+    PostBuild (optional): also deploy the DLL to a r2modman profile's
+    BepInEx\plugins\ folder (no .pdb - see DeployToBepInEx). Fires
+    after DeployToBepInEx.
     Only runs if R2ModmanProfilePath is set. Typical r2modman path:
       C:\Users\<user>\AppData\Roaming\r2modmanPlus-local\
         DysonSphereProgram\profiles\<profile-name>
@@ -151,7 +158,6 @@
     <MakeDir Directories="$(_R2ModmanPluginsDir)" />
     <ItemGroup>
       <_R2ModmanDeployFiles Include="$(TargetPath)" />
-      <_R2ModmanDeployFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
     </ItemGroup>
     <Copy SourceFiles="@(_R2ModmanDeployFiles)" DestinationFolder="$(_R2ModmanPluginsDir)" SkipUnchangedFiles="true" />
     <Message Text="Deployed $(AssemblyName) -> $(_R2ModmanPluginsDir)" Importance="high" />
