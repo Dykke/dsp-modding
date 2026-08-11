@@ -39,6 +39,7 @@ namespace PlanetwideAmmoSupply
         internal static ConfigEntry<bool> SupplyBattleBases;
         internal static ConfigEntry<bool> PreferHighestAmmoTier;
         internal static ConfigEntry<float> SupplyRadius;
+        internal static ConfigEntry<bool> NearestStationFirst;
         internal static ConfigEntry<int> RefillIntervalTicks;
         internal static ConfigEntry<bool> RequireStationSupplyFlag;
         internal static ConfigEntry<string> FighterItemFilter;
@@ -70,6 +71,9 @@ namespace PlanetwideAmmoSupply
             SupplyRadius = Config.Bind(
                 "General", "SupplyRadius", 0f,
                 "Max distance (metres) from a structure to an eligible station. 0 = planetwide (any station on the planet).");
+            NearestStationFirst = Config.Bind(
+                "General", "NearestStationFirst", true,
+                "Pull from the closest eligible station first (true) instead of station build order (false). Pairs naturally with SupplyRadius.");
             RefillIntervalTicks = Config.Bind(
                 "General", "RefillIntervalTicks", 60,
                 "Game ticks between refill scans (throttle). ~60 = 1s. Higher = cheaper, lower = more responsive.");
@@ -90,7 +94,8 @@ namespace PlanetwideAmmoSupply
                 + " SupplyRadius=" + SupplyRadius.Value
                 + " RefillIntervalTicks=" + RefillIntervalTicks.Value
                 + " RequireStationSupplyFlag=" + RequireStationSupplyFlag.Value
-                + " PreferHighestAmmoTier=" + PreferHighestAmmoTier.Value);
+                + " PreferHighestAmmoTier=" + PreferHighestAmmoTier.Value
+                + " NearestStationFirst=" + NearestStationFirst.Value);
 
             // Harmony. PatchAll is a no-op until the Phase 2/3 patch classes
             // are added under Patches\ - the mod loads and does nothing yet.
