@@ -1,0 +1,9 @@
+﻿{
+  "name": "StackingPlus",
+  "version_number": "1.0.0",
+  "website_url": "https://github.com/Dykke/dsp-modding",
+  "description": "Short one-line description shown on the Thunderstore page.",
+  "dependencies": [
+    "xiaoye97-BepInEx-5.4.17"
+  ]
+}
