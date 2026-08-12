@@ -69,6 +69,7 @@ namespace DSPCalculatorPlus
         public readonly ConfigEntry<bool> EnableMultiLaneOverflowFix;
         public readonly ConfigEntry<bool> PushBeltStackingOnOverflow;
         public readonly ConfigEntry<PowerPoleType> AutoPowerPoles;
+        public readonly ConfigEntry<bool> EnableStackingPlusCompat;
         public readonly ConfigEntry<bool> DebugLog;
 
         public PluginConfig(ConfigFile config)
@@ -106,9 +107,11 @@ namespace DSPCalculatorPlus
                 + "carry its rate (typically an un-externalizable BYPRODUCT like hydrogen at high quantity). "
                 + "Only activates on an otherwise-failing generation: it raises DSPCalculator's belt-stacking "
                 + "to the vanilla max (4x cargo) and regenerates, which ~4x's the throughput ceiling. "
-                + "The resulting blueprint ASSUMES 4x cargo stacking, so you need the pile/proliferator "
+                + "The resulting blueprint ASSUMES that cargo stacking, so you need the pile/proliferator "
                 + "stacking tech to run it at full rate; without it, belts under-carry. Set false to keep "
-                + "failing cleanly instead. Cannot exceed vanilla 4x - past that, reduce quantity or split the blueprint.");
+                + "failing cleanly instead. Caps at DSPCalculator's stacking cap (vanilla 4x; higher if the "
+                + "StackingPlus mod is installed - see EnableStackingPlusCompat); past that, reduce quantity "
+                + "or split the blueprint.");
 
             AutoPowerPoles = config.Bind(
                 "General",
@@ -121,6 +124,17 @@ namespace DSPCalculatorPlus
                 + "(full coverage, fits any layout). SatelliteSubstation = also drop wide Satellite "
                 + "Substations where their 7x7 footprint fits, filling the rest with Tesla Towers. "
                 + "Off = leave power to you, as stock DSPCalculator does.");
+
+            EnableStackingPlusCompat = config.Bind(
+                "Compatibility",
+                "EnableStackingPlusCompat",
+                true,
+                "When the StackingPlus mod is installed, sync DSPCalculator's stacking cap "
+                + "(CalcDB.maxStackSize) to the live in-game cargo-stacking cap StackingPlus raises "
+                + "(GameMain.history.inserterStackOutput). This lets the overflow fix push belt-stacking "
+                + "past vanilla 4x (e.g. to 8x) so high-throughput byproducts like hydrogen fit on fewer "
+                + "belts. No effect if StackingPlus isn't installed (the live cap stays <=4). "
+                + "Disable to keep DSPCalculator's fixed vanilla 4x cap regardless.");
 
             DebugLog = config.Bind(
                 "Diagnostics",

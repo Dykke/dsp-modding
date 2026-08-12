@@ -71,6 +71,7 @@ namespace DSPCalculatorPlus
                 + ", overflowFix(externalize)=" + Config.EnableMultiLaneOverflowFix.Value
                 + ", pushBeltStacking=" + Config.PushBeltStackingOnOverflow.Value
                 + ", autoPowerPoles=" + Config.AutoPowerPoles.Value
+                + ", stackingPlusCompat=" + Config.EnableStackingPlusCompat.Value
                 + ", debug=" + Config.DebugLog.Value);
 
             // 3. Apply Harmony patches. PatchAll auto-discovers every
@@ -102,6 +103,17 @@ namespace DSPCalculatorPlus
                 // point, filtered to DSPCalculator blueprints. Gated by
                 // AutoPowerPoles.
                 PowerPolePatch.Apply(_harmony);
+
+                // StackingPlus compat: sync DSPCalculator's stacking cap to the
+                // live in-game cargo cap StackingPlus raises, so the overflow fix
+                // can push belt-stacking past vanilla 4x. Gated by
+                // EnableStackingPlusCompat; only active when StackingPlus is
+                // detected (retried in Start(), see below).
+                if (Config.EnableStackingPlusCompat.Value)
+                {
+                    StackingPlusCompat.Apply(_harmony);
+                    StackingPlusCompat.Detect(); // best-effort; StackingPlus loads after us alphabetically
+                }
             }
             catch (Exception ex)
             {
@@ -155,11 +167,17 @@ namespace DSPCalculatorPlus
             }
         }
 
-        // No Start() cross-mod detection retry is needed here: DSPCalculator
-        // is a HARD BepInEx dependency ([BepInDependency] above), so BepInEx
-        // guarantees it is loaded before this plugin's Awake() runs. (The
-        // Start()-retry pattern is only required for SOFT/optional compat
-        // layers - see EndlessResources' PlanetMinerFastCompat.)
+        // DSPCalculator itself needs no Start() retry - it is a HARD BepInEx
+        // dependency ([BepInDependency] above), loaded before our Awake().
+        // StackingPlus, however, is a SOFT/optional compat target that loads
+        // AFTER us alphabetically (S > D), so its detection is retried here in
+        // Start() (workspace cross-mod rule; see EndlessResources'
+        // PlanetMinerFastCompat).
+        private void Start()
+        {
+            if (Config.EnableStackingPlusCompat.Value)
+                StackingPlusCompat.Detect();
+        }
 
         private void OnDestroy()
         {
