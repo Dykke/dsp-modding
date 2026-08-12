@@ -2,7 +2,7 @@
   "name": "PlanetwideAmmoSupply",
   "version_number": "1.0.0",
   "website_url": "https://github.com/Dykke/dsp-modding",
-  "description": "Short one-line description shown on the Thunderstore page.",
+  "description": "Auto-restock turrets and battle bases with ammo and fighters pulled from the planet's logistics network (ILS/PLS). Consumes real station stock. Planetwide by default, configurable reach, highest-tier preference, gated debug log.",
   "dependencies": [
     "xiaoye97-BepInEx-5.4.17"
   ]
