@@ -66,6 +66,14 @@
       <HintPath>$(GameManagedDir)\netstandard.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- The game assembly. Needed for the power-pole feature (Group C),
+         which builds standard game BlueprintBuilding entries and reads
+         PrefabDesc power/footprint data. Private=false: never copied into
+         our output (standing "never ship game DLLs" rule). -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GameManagedDir)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine">
       <HintPath>$(GameManagedDir)\UnityEngine.dll</HintPath>
       <Private>false</Private>
@@ -90,6 +98,7 @@
     <Error Condition="!Exists('$(BepInExCoreDir)\BepInEx.dll')" Text="BepInEx.dll was not found under GameRoot '$(GameRoot)'. Install BepInEx 5 first." />
     <Error Condition="!Exists('$(BepInExCoreDir)\0Harmony.dll')" Text="0Harmony.dll was not found under GameRoot '$(GameRoot)'. Install BepInEx 5 first." />
     <Error Condition="!Exists('$(GameManagedDir)\netstandard.dll')" Text="netstandard.dll was not found under GameRoot '$(GameRoot)'." />
+    <Error Condition="!Exists('$(GameManagedDir)\Assembly-CSharp.dll')" Text="Assembly-CSharp.dll was not found under GameRoot '$(GameRoot)'." />
     <Error Condition="!Exists('$(GameManagedDir)\UnityEngine.dll')" Text="UnityEngine.dll was not found under GameRoot '$(GameRoot)'." />
     <Error Condition="!Exists('$(GameManagedDir)\UnityEngine.CoreModule.dll')" Text="UnityEngine.CoreModule.dll was not found under GameRoot '$(GameRoot)'." />
     <Error Condition="!Exists('$(GameManagedDir)\UnityEngine.InputLegacyModule.dll')" Text="UnityEngine.InputLegacyModule.dll was not found under GameRoot '$(GameRoot)'." />

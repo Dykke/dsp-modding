@@ -36,6 +36,27 @@ namespace DSPCalculatorPlus
     }
 
     /// <summary>
+    /// Which electric pole (if any) DSPCalculatorPlus auto-places over a
+    /// generated blueprint to power its machines. DSPCalculator itself never
+    /// adds power infrastructure, so the user normally hand-places poles.
+    /// <see cref="Off"/> keeps that manual behaviour. <see cref="TeslaTower"/>
+    /// (default) fills the whole blueprint with cheap 1x1 Tesla Towers -
+    /// guaranteed full coverage that fits any layout.
+    /// <see cref="SatelliteSubstation"/> additionally drops wide-coverage
+    /// Satellite Substations wherever their 7x7 footprint fits, then still
+    /// fills the rest with Tesla Towers (substations alone can't cover a dense
+    /// layout, and cost far more). Poles only land on tiles no machine/belt
+    /// occupies and never closer than the game's minimum pole spacing, so the
+    /// addition never breaks the paste.
+    /// </summary>
+    public enum PowerPoleType
+    {
+        Off = 0,
+        TeslaTower = 1,
+        SatelliteSubstation = 2,
+    }
+
+    /// <summary>
     /// Typed wrapper over the BepInEx <see cref="ConfigFile"/>. All settings
     /// are bound once, here, in the constructor (called from
     /// <c>Plugin.Awake</c>). Never bind a key twice, and never add settings
@@ -46,6 +67,8 @@ namespace DSPCalculatorPlus
         public readonly ConfigEntry<BeltTier> BeltTierOverride;
         public readonly ConfigEntry<SorterTier> SorterTierOverride;
         public readonly ConfigEntry<bool> EnableMultiLaneOverflowFix;
+        public readonly ConfigEntry<bool> PushBeltStackingOnOverflow;
+        public readonly ConfigEntry<PowerPoleType> AutoPowerPoles;
         public readonly ConfigEntry<bool> DebugLog;
 
         public PluginConfig(ConfigFile config)
@@ -74,6 +97,30 @@ namespace DSPCalculatorPlus
                 + "input instead of failing. The item is no longer produced inside the blueprint - "
                 + "you feed it from your ILS/PLS network - which is how the blackbox blueprint model "
                 + "is meant to scale. Target outputs cannot be externalized and still fail cleanly.");
+
+            PushBeltStackingOnOverflow = config.Bind(
+                "General",
+                "PushBeltStackingOnOverflow",
+                true,
+                "Last resort when a blueprint still fails because a single block's output belt can't "
+                + "carry its rate (typically an un-externalizable BYPRODUCT like hydrogen at high quantity). "
+                + "Only activates on an otherwise-failing generation: it raises DSPCalculator's belt-stacking "
+                + "to the vanilla max (4x cargo) and regenerates, which ~4x's the throughput ceiling. "
+                + "The resulting blueprint ASSUMES 4x cargo stacking, so you need the pile/proliferator "
+                + "stacking tech to run it at full rate; without it, belts under-carry. Set false to keep "
+                + "failing cleanly instead. Cannot exceed vanilla 4x - past that, reduce quantity or split the blueprint.");
+
+            AutoPowerPoles = config.Bind(
+                "General",
+                "AutoPowerPoles",
+                PowerPoleType.TeslaTower,
+                "Auto-place electric poles over generated blueprints so the machines get power "
+                + "(DSPCalculator never adds any). Poles land only on empty tiles - never on a "
+                + "machine/belt and never closer than the game's minimum pole spacing - so they "
+                + "can't break the paste. TeslaTower (default) = fill with cheap 1x1 Tesla Towers "
+                + "(full coverage, fits any layout). SatelliteSubstation = also drop wide Satellite "
+                + "Substations where their 7x7 footprint fits, filling the rest with Tesla Towers. "
+                + "Off = leave power to you, as stock DSPCalculator does.");
 
             DebugLog = config.Bind(
                 "Diagnostics",

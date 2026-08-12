@@ -69,6 +69,8 @@ namespace DSPCalculatorPlus
             DSPCalculatorPlusLog.Info("[config] belt=" + Config.BeltTierOverride.Value
                 + ", sorter=" + Config.SorterTierOverride.Value
                 + ", overflowFix(externalize)=" + Config.EnableMultiLaneOverflowFix.Value
+                + ", pushBeltStacking=" + Config.PushBeltStackingOnOverflow.Value
+                + ", autoPowerPoles=" + Config.AutoPowerPoles.Value
                 + ", debug=" + Config.DebugLog.Value);
 
             // 3. Apply Harmony patches. PatchAll auto-discovers every
@@ -93,6 +95,13 @@ namespace DSPCalculatorPlus
                 // + regenerate) instead of failing generation. Gated by
                 // EnableMultiLaneOverflowFix.
                 OverflowFixPatch.Apply(_harmony);
+
+                // Group C: auto power poles. Appends Tesla Tower / Satellite
+                // Substation buildings covering the generated blueprint's
+                // machines, on free tiles only. Targets the game's paste entry
+                // point, filtered to DSPCalculator blueprints. Gated by
+                // AutoPowerPoles.
+                PowerPolePatch.Apply(_harmony);
             }
             catch (Exception ex)
             {

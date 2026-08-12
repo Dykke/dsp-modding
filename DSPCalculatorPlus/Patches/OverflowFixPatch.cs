@@ -46,6 +46,8 @@ namespace DSPCalculatorPlus
         private static FieldInfo _fTargetItemId;      // ItemTarget.itemId
         private static FieldInfo _fTargetSpeed;       // ItemTarget.speed
         private static FieldInfo _fForceNotOre;       // ItemConfig.forceNotOre
+        private static FieldInfo _fBpStackSetting;    // UserPreference.bpStackSetting (0=auto,1..4 forced)
+        private static FieldInfo _fMaxStackSize;      // CalcDB.maxStackSize (double) - DSPCalculator's stacking cap (4 vanilla; a future mod may raise it)
         private static MethodInfo _mReSolve;          // SolutionTree.ReSolve(double)  -- does ClearTree()+Solve()
         private static MethodInfo _mGenerateFull;     // BpConnector.GenerateFullBlueprint
         private static bool _ready;
@@ -90,6 +92,11 @@ namespace DSPCalculatorPlus
             _fItemConfigs = tUserPref != null ? AccessTools.Field(tUserPref, "itemConfigs") : null;
             _fConsideredAsOre = tItemConfig != null ? AccessTools.Field(tItemConfig, "consideredAsOre") : null;
             _fForceNotOre = tItemConfig != null ? AccessTools.Field(tItemConfig, "forceNotOre") : null;
+            _fBpStackSetting = tUserPref != null ? AccessTools.Field(tUserPref, "bpStackSetting") : null;
+            // Dynamic stacking cap - read live so a future belt-stacking mod that
+            // raises CalcDB.maxStackSize is picked up automatically (no hardcoded 4).
+            var tCalcDB = AccessTools.TypeByName("DSPCalculator.Logic.CalcDB");
+            _fMaxStackSize = tCalcDB != null ? AccessTools.Field(tCalcDB, "maxStackSize") : null;
             _ctorItemConfig = tItemConfig != null ? AccessTools.Constructor(tItemConfig, new[] { typeof(int) }) : null;
             _fSumNeedSpeed = tSumInfo != null ? AccessTools.Field(tSumInfo, "needBeltSpeed") : null;
             _fSumItemId = tSumInfo != null ? AccessTools.Field(tSumInfo, "itemId") : null;
@@ -114,6 +121,18 @@ namespace DSPCalculatorPlus
             harmony.Patch(_mGenerateFull,
                 prefix: new HarmonyMethod(typeof(OverflowFixPatch), nameof(GenPrefix)),
                 postfix: new HarmonyMethod(typeof(OverflowFixPatch), nameof(GenPostfix)) { priority = Priority.Low });
+
+            // DIAGNOSTIC (retry-only): log each downstream generation stage's
+            // return value during our internal regenerate, to pinpoint WHICH
+            // stage fails at scale when Phase B force-past-overflow still yields
+            // a failed blueprint (belt-height shows a popup; a silent stage does
+            // not - this names it). FALSE lines are Warn (always shown).
+            foreach (var stage in new[] { "GenProcessors", "ArrangeBpBlocks", "PlaceBuildings", "ConnectBlocks" })
+            {
+                var sm = AccessTools.Method(tConnector, stage);
+                if (sm != null && sm.ReturnType == typeof(bool))
+                    harmony.Patch(sm, postfix: new HarmonyMethod(typeof(OverflowFixPatch), nameof(StagePostfix)));
+            }
 
             // DIAGNOSTIC + spam-suppression: intercept the game's UIMessageBox.Show
             // so that during our internal regeneration we LOG the exact failure
@@ -152,6 +171,33 @@ namespace DSPCalculatorPlus
             DSPCalculatorPlusLog.Warn("[overflow][diag] DSPCalculator dialog during regenerate (suppressed): \"" + __0 + "\" | \"" + __1 + "\"");
             __result = null;
             return false;
+        }
+
+        /// <summary>DSPCalculator's live stacking cap (CalcDB.maxStackSize; 4
+        /// vanilla). Read dynamically so a future belt-stacking mod that raises
+        /// it is honoured automatically. Falls back to 4 if unreadable.</summary>
+        private static int ReadMaxStack()
+        {
+            if (_fMaxStackSize != null)
+            {
+                try
+                {
+                    int v = (int)Math.Round(Convert.ToDouble(_fMaxStackSize.GetValue(null)));
+                    if (v >= 1) return v;
+                }
+                catch { /* fall through to default */ }
+            }
+            return 4;
+        }
+
+        // DIAGNOSTIC: names the downstream stage that fails during a retry.
+        private static void StagePostfix(bool __result, MethodBase __originalMethod)
+        {
+            if (!_inRetry) return;
+            if (!__result)
+                DSPCalculatorPlusLog.Warn("[overflow][stage] " + __originalMethod.Name + " returned FALSE <- failing stage.");
+            else
+                DSPCalculatorPlusLog.Info("[overflow][stage] " + __originalMethod.Name + " ok.");
         }
 
         private static void GenPrefix()
@@ -223,6 +269,14 @@ namespace DSPCalculatorPlus
             // mutate it, so we anchor every re-solve to this and restore it.
             double origSpeed = GetPrimaryTargetSpeed(solution);
 
+            // Optional last-resort lever (PushBeltStackingOnOverflow): raising
+            // belt-stacking to the vanilla max (4x) multiplies per-belt capacity,
+            // which is exactly what a failing block-level belt check
+            // (bpCountToSatisfy>1, e.g. an un-externalizable hydrogen byproduct)
+            // needs. Declared out here so finally can restore it.
+            bool stackRaised = false;
+            int origStack = 0;
+
             _inRetry = true;
             _restoreOreValue.Clear();
             _restoreForceNotOre.Clear();
@@ -233,9 +287,28 @@ namespace DSPCalculatorPlus
             {
                 bool result = false;
                 int pass = 0;
+
+                // Try raising belt-stacking to the max FIRST - it often clears
+                // the overflow with no externalization at all (cleanest result).
+                // The cap is read live (CalcDB.maxStackSize), so a future
+                // stacking mod that raises it is used automatically.
+                int maxStack = ReadMaxStack();
+                if (Plugin.Config.PushBeltStackingOnOverflow.Value && _fBpStackSetting != null && userPref != null && maxStack > 1)
+                {
+                    origStack = (int)_fBpStackSetting.GetValue(userPref);
+                    if (origStack != maxStack)
+                    {
+                        _fBpStackSetting.SetValue(userPref, maxStack);
+                        stackRaised = true;
+                        DSPCalculatorPlusLog.Info("[overflow] raising belt-stacking to " + maxStack + "x (was " + origStack + ") to lift the belt-capacity ceiling.");
+                        result = (bool)_mGenerateFull.Invoke(__instance, new object[] { genLevel, forcePortOnLeft, orthogonalConnect });
+                        if (result) DSPCalculatorPlusLog.Info("[overflow] " + maxStack + "x belt-stacking alone resolved it - no externalization needed.");
+                    }
+                }
+
                 // Phase A: externalize newly-seen overflow items until only
                 // stuck ones remain (nothing new to try).
-                while (pass < 40)
+                while (!result && pass < 40)
                 {
                     var newItems = new List<int>();
                     foreach (int id in _pendingExternal)
@@ -262,19 +335,37 @@ namespace DSPCalculatorPlus
                 var stuck = new List<int>(_pendingExternal);
                 if (!result)
                 {
+                    // DIAGNOSTIC: any UIMessageBox that fires between these two
+                    // lines names the DOWNSTREAM failure stage (belt-height game
+                    // limit / "Unexpected Error 503" from ConnectBlocks / etc.).
+                    // If none fires and Phase B still returns false, the failure
+                    // is a SILENT stage (GenProcessors/ArrangeBpBlocks/PlaceBuildings).
+                    DSPCalculatorPlusLog.Info("[overflow] Phase B: finalizing (force past single-belt check) with "
+                        + stuck.Count + " stuck item(s) under-provisioned [" + Join(stuck) + "]...");
                     _finalizeUnderProvision = true;
                     result = (bool)_mGenerateFull.Invoke(__instance, new object[] { genLevel, forcePortOnLeft, orthogonalConnect });
                     _finalizeUnderProvision = false;
+                    DSPCalculatorPlusLog.Info("[overflow] Phase B: generation returned " + result
+                        + (result ? "" : " (see any [overflow][diag] dialog line just above for the downstream reason; "
+                            + "if there is none, a silent placement/connection stage failed at this scale).") + ".");
                 }
 
                 __result = result;
                 DSPCalculatorPlusLog.Info("[overflow] marked " + externalized.Count + " item(s) as external over " + pass
                     + " pass(es) [" + Join(externalized) + "]; of those, " + stuck.Count + " did NOT prune (stuck, "
                     + "under-provisioned) [" + Join(stuck) + "] => " + (externalized.Count - stuck.Count)
-                    + " genuinely externalized; generation " + (result ? "succeeded" : "FAILED") + ".");
+                    + " genuinely externalized; generation " + (result ? "succeeded" : "FAILED")
+                    + (stackRaised && result ? " (using " + maxStack + "x belt-stacking - blueprint ASSUMES that cargo stacking; needs pile/proliferator tech to run at full rate)" : "")
+                    + ".");
                 if (stuck.Count > 0)
                     DSPCalculatorPlusLog.Warn("[overflow] stuck items (byproducts or targets that can't become inputs) are on a single "
                         + "belt and under-provisioned: [" + Join(stuck) + "]. Add extra output/input belts for these manually.");
+                if (!result)
+                    DSPCalculatorPlusLog.Warn("[overflow] could not generate even after externalizing"
+                        + (stackRaised ? " + 4x belt-stacking" : "")
+                        + " - a byproduct's belt demand still exceeds capacity at this scale. "
+                        + "Reduce the target quantity, or split into multiple smaller blueprints"
+                        + (stackRaised ? " (already at max " + maxStack + "x stacking)." : (Plugin.Config.PushBeltStackingOnOverflow.Value ? "." : ", or enable PushBeltStackingOnOverflow to try higher stacking.")));
             }
             catch (Exception ex)
             {
@@ -283,6 +374,11 @@ namespace DSPCalculatorPlus
             finally
             {
                 _finalizeUnderProvision = false;
+                if (stackRaised)
+                {
+                    try { _fBpStackSetting.SetValue(userPref, origStack); }
+                    catch (Exception ex) { DSPCalculatorPlusLog.Error("[overflow] restore bpStackSetting failed: " + ex.Message); }
+                }
                 RestoreItemConfigs(itemConfigs);
                 // Restore the user's solution exactly: original item classes +
                 // original target speed, then ReSolve so the calc window matches.
