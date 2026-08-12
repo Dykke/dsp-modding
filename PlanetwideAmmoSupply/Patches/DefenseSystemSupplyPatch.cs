@@ -32,7 +32,7 @@ namespace PlanetwideAmmoSupply
         private const long LogThrottleTicks = 300L;
         private static long _lastLogTick = long.MinValue;
 
-        private struct TurretScan { public int total, belowCap, refilled, movedItems, noStock; }
+        private struct TurretScan { public int total, belowCap, refilled, movedItems, noStock; public float nearestSupply; }
         private struct BattleScan { public int bases, slotsRefilled, movedItems; }
 
         static void Postfix(DefenseSystem __instance, long tick, bool isActive)
@@ -67,6 +67,14 @@ namespace PlanetwideAmmoSupply
                         + (verbose ? "total=" + ts.total + " belowCap=" + ts.belowCap + " " : "")
                         + "refilled=" + ts.refilled + " items=" + ts.movedItems
                         + (ts.noStock > 0 ? " noStock=" + ts.noStock : "") + "}";
+                    if (verbose)
+                    {
+                        // Real distance to the nearest supplying station vs the
+                        // configured radius, so the user can size SupplyRadius.
+                        msg += " radius=" + (radius <= 0f ? "planetwide" : radius.ToString("0"));
+                        if (ts.belowCap > 0)
+                            msg += " nearestStation=" + (ts.nearestSupply < 0f ? "none-on-planet" : ts.nearestSupply.ToString("0"));
+                    }
                     if (verbose || bs.movedItems > 0)
                         msg += " battlebase{" + (verbose ? "bases=" + bs.bases + " " : "")
                             + "items=" + bs.movedItems + "}";
@@ -90,6 +98,12 @@ namespace PlanetwideAmmoSupply
             int cursor = pool.cursor;
             EntityData[] entityPool = factory.entityPool;
 
+            // Diagnostic: only sample the nearest-station distance once per scan,
+            // and only when VerboseScan is on (the measurement iterates stations).
+            bool sampleDist = Plugin.VerboseScan.Value && PlanetwideAmmoSupplyLog.IsDebugEnabled();
+            bool sampled = false;
+            r.nearestSupply = -1f;
+
             for (int i = 1; i < cursor; i++)
             {
                 // Index the array element directly - a struct copy would discard writes.
@@ -101,6 +115,13 @@ namespace PlanetwideAmmoSupply
                 Vector3 pos = Vector3.zero;
                 int eid = buffer[i].entityId;
                 if (entityPool != null && eid > 0 && eid < entityPool.Length) pos = entityPool[eid].pos;
+
+                // One real distance sample per scan so the user can size SupplyRadius.
+                if (sampleDist && !sampled)
+                {
+                    r.nearestSupply = AmmoSourcing.NearestAmmoStationDistance(factory, buffer[i].itemId, buffer[i].ammoType, pos);
+                    sampled = true;
+                }
 
                 int itemId = buffer[i].itemId;
                 if (itemId == 0)

@@ -162,6 +162,60 @@ namespace PlanetwideAmmoSupply
             return 0;
         }
 
+        /// <summary>
+        /// Diagnostic only (VerboseScan). Returns the straight-line world-unit
+        /// distance from <paramref name="pos"/> to the NEAREST station that holds
+        /// usable ammo for this turret, IGNORING SupplyRadius - so the log can
+        /// tell the user exactly how large SupplyRadius must be to reach real
+        /// supply. Honors RequireStationSupplyFlag so it reflects true
+        /// eligibility. If <paramref name="itemId"/> &gt; 0 that exact item is
+        /// matched; otherwise any compatible tier from turretNeeds[ammoType].
+        /// Returns -1 if no eligible station exists anywhere on the planet.
+        /// </summary>
+        internal static float NearestAmmoStationDistance(PlanetFactory factory, int itemId, EAmmoType ammoType, Vector3 pos)
+        {
+            PlanetTransport transport = factory != null ? factory.transport : null;
+            if (transport == null || transport.stationPool == null) return -1f;
+
+            bool requireSupply = Plugin.RequireStationSupplyFlag.Value;
+            EntityData[] entityPool = factory.entityPool;
+            int cursor = transport.stationCursor;
+
+            // Resolve the set of item ids that count as "usable" for this turret.
+            int[] needs = null;
+            if (itemId <= 0)
+            {
+                int idx = (int)ammoType;
+                if (idx > 0 && ItemProto.turretNeeds != null && idx < ItemProto.turretNeeds.Length)
+                    needs = ItemProto.turretNeeds[idx];
+            }
+
+            float bestSqr = -1f;
+            for (int s = 1; s < cursor; s++)
+            {
+                StationComponent station = transport.stationPool[s];
+                if (station == null || station.id != s || station.storage == null) continue;
+
+                bool has = false;
+                if (itemId > 0) has = StationHasItem(station, itemId, requireSupply);
+                else if (needs != null)
+                {
+                    for (int n = 0; n < needs.Length && !has; n++)
+                        if (needs[n] > 0) has = StationHasItem(station, needs[n], requireSupply);
+                }
+                if (!has) continue;
+
+                float d = 0f;
+                if (entityPool != null)
+                {
+                    int eid = station.entityId;
+                    if (eid > 0 && eid < entityPool.Length) d = (entityPool[eid].pos - pos).sqrMagnitude;
+                }
+                if (bestSqr < 0f || d < bestSqr) bestSqr = d;
+            }
+            return bestSqr < 0f ? -1f : Mathf.Sqrt(bestSqr);
+        }
+
         private static bool HasStock(PlanetFactory factory, int itemId, Vector3 pos, float radius)
         {
             PlanetTransport transport = factory.transport;
