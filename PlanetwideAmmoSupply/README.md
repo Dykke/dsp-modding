@@ -114,7 +114,7 @@ read at launch).
 
 ## License
 
-MIT.
+MIT. See `LICENSE` for the full text.
 
 ## Credits
 
