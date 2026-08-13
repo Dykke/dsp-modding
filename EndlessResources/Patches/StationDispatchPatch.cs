@@ -32,7 +32,13 @@ namespace EndlessResources
     {
         internal sealed class Snapshot
         {
-            public StationStore[] storage; // direct reference; the function does not realloc the array
+            // A VALUE COPY of the pre-dispatch storage. StationStore is a
+            // struct, so this array holds independent copies of each slot.
+            // (Capturing __instance.storage by reference would alias the
+            // live array - DetermineDispatch mutates it in place, so the
+            // "snapshot" would change with it and the restore would be a
+            // no-op. This was a real bug: it must be a copy, not a ref.)
+            public StationStore[] storage;
         }
 
         private static bool firstFireLogged = true;
@@ -56,7 +62,12 @@ namespace EndlessResources
                 if (!Plugin.Config.EnableILSSourceFlag.Value) return;
                 if (__instance == null || __instance.storage == null) return;
 
-                __state = new Snapshot { storage = __instance.storage };
+                // Deep-copy the struct array so the snapshot is independent
+                // of the live storage the function is about to mutate.
+                var src = __instance.storage;
+                var snap = new StationStore[src.Length];
+                Array.Copy(src, snap, src.Length);
+                __state = new Snapshot { storage = snap };
             }
             catch (Exception ex)
             {
@@ -90,9 +101,9 @@ namespace EndlessResources
                 bool anyChanged = false;
                 for (int i = 0; i < storage.Length; i++)
                 {
-                    // The storage array reference is stable (the
-                    // function never reallocs it). So we just need
-                    // to restore the per-slot fields.
+                    // storage[i] is the pre-dispatch value copy; compare it
+                    // against the live slot and restore any field the
+                    // dispatch changed.
                     if (__instance.storage[i].count != storage[i].count ||
                         __instance.storage[i].inc != storage[i].inc ||
                         __instance.storage[i].localOrder != storage[i].localOrder ||

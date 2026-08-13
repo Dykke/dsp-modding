@@ -2,7 +2,7 @@
     "name": "EndlessResources",
     "version_number": "1.0.0",
     "website_url": "https://github.com/Dykke/dsp-modding",
-    "description": "All veins stay full. All logistics buffers stay full. Replaces DSP Infinite Resource Nodes with a modern Harmony plugin and adds ILS / PLS support. Per-source toggles, gated debug log.",
+    "description": "Planet veins, oil, and ILS / PLS station stock never run dry. Covers miners, oil extractors, Icarus hand-mining, and ILS / PLS vein collection, plus PlanetMinerFast support. Per-source toggles, gated debug log.",
     "dependencies": [
         "xiaoye97-BepInEx-5.4.17"
     ]

@@ -47,7 +47,7 @@ namespace EndlessResources
                 "General",
                 "EnableIcarusPatchFlag",
                 true,
-                "Restore vein amount after Icarus hand-mine (the mecha F-to-mine). " +
+                "Restore vein amount after Icarus hand-mining (right-click a resource node). " +
                 "When true, the player can hand-mine indefinitely.");
 
             EnableILSVeinCollectionFlag = config.Bind(

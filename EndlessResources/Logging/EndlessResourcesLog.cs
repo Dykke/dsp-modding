@@ -8,9 +8,8 @@ namespace EndlessResources
     /// are gated behind the "Debug log" config flag. Warnings and errors
     /// always print regardless of the gate.
     ///
-    /// The gate re-reads the ConfigEntry on every call (via SettingChanged
-    /// plus a direct .Value read), so toggling the config takes effect
-    /// immediately without a restart.
+    /// The gate re-reads the ConfigEntry's .Value on every call, so
+    /// toggling the config takes effect immediately without a restart.
     /// </summary>
     internal static class EndlessResourcesLog
     {
@@ -21,10 +20,9 @@ namespace EndlessResources
         {
             logger = src;
             debugEntry = debug;
-            // Re-read on every call so toggling the config takes effect
-            // immediately. SettingChanged is also wired (the field is read
-            // fresh on every Info() call, so this is belt-and-suspenders).
-            debug.SettingChanged += (_, __) => { /* no-op; field is re-read each call */ };
+            // No SettingChanged subscription needed: debugEntry.Value is read
+            // fresh on every Info()/IsDebugEnabled() call, so a config toggle
+            // takes effect immediately without a restart.
         }
 
         /// <summary>Verbose info. Gated by Debug log. Tag with a category in the message.</summary>
