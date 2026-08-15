@@ -1207,21 +1207,12 @@ namespace DSPCalculatorPlus
 
             double worstAll = WorstDistance(buildings, nBuildings, spatialAll, px, py, 0, out int consumers);
             double worstSafe = WorstDistance(buildings, nBuildings, spatialSafe, px, py, 0, out _);
-            // Same measurement but taking each consumer at its OTHER endpoint (mode 1)
-            // and MIDPOINT (mode 2). The game powers a sorter from its entity centre
-            // (= localOffset). If worst-at-endpoint2 or midpoint is much larger (over
-            // 10.5) while worst-at-localOffset is fine, we are measuring the wrong end
-            // of 2-tile sorters and the game's real plug point is out of reach.
-            double worstEnd2 = WorstDistance(buildings, nBuildings, spatialAll, px, py, 1, out _);
-            double worstMid = WorstDistance(buildings, nBuildings, spatialAll, px, py, 2, out _);
 
             DSPCalculatorPlusLog.Info("[poles][diag] worst consumer->nearest-pole distance over " + consumers
                 + " consumer(s) (Tesla reach=10.5): " + worstAll.ToString("0.00")
                 + " with all poles; " + worstSafe.ToString("0.00") + " if the " + underBeltPoles
                 + " under-belt pole(s) are dropped.");
-            DSPCalculatorPlusLog.Info("[poles][diag] worst measured at consumer endpoint2=" + worstEnd2.ToString("0.00")
-                + ", midpoint=" + worstMid.ToString("0.00")
-                + " (if either >10.5 while localOffset is fine, the sorter's real plug point is beyond reach = a position-measurement bug).");
+            LogWorstConsumers(buildings, nBuildings, spatialAll, px, py, 5);
         }
 
         private static void AddIdx(Dictionary<long, List<int>> spatial, long bk, int idx)
@@ -1231,9 +1222,14 @@ namespace DSPCalculatorPlus
             l.Add(idx);
         }
 
-        // Largest consumer->nearest-pole distance under a given pole spatial hash.
-        // point: 0 = localOffset (the game's plug point), 1 = localOffset2 (other
-        // endpoint), 2 = midpoint of the two.
+        // Largest consumer->nearest-pole distance under a given pole spatial hash,
+        // measured at localOffset - confirmed (via decompile: PowerSystem.
+        // NewConsumerComponent sets plugPos = entityPool[id].pos, which traces back
+        // through BuildFinally/BlueprintPaste to localOffset_x/y/z exactly, for every
+        // consumer including sorters) to be the game's real power-plug point. No
+        // other candidate point (a sorter's OTHER endpoint, or a midpoint) is
+        // relevant - localOffset_x2/y2 only ever feeds the sorter's OWN pick/drop
+        // logic, never PowerSystem.
         private static double WorstDistance(BlueprintBuilding[] buildings, int nBuildings,
             Dictionary<long, List<int>> spatial, List<int> px, List<int> py, int point, out int consumers)
         {
@@ -1244,10 +1240,7 @@ namespace DSPCalculatorPlus
                 BlueprintBuilding b = buildings[i];
                 if (!IsConsumer(b.itemId)) continue;
                 consumers++;
-                double fx, fy;
-                if (point == 1) { fx = b.localOffset_x2; fy = b.localOffset_y2; }
-                else if (point == 2) { fx = (b.localOffset_x + b.localOffset_x2) * 0.5; fy = (b.localOffset_y + b.localOffset_y2) * 0.5; }
-                else { fx = b.localOffset_x; fy = b.localOffset_y; }
+                double fx = b.localOffset_x, fy = b.localOffset_y;
                 int bx = FloorDiv((int)Math.Round(fx), Bucket), by = FloorDiv((int)Math.Round(fy), Bucket);
                 double best = double.MaxValue;
                 for (int dbx = -1; dbx <= 1; dbx++)
@@ -1266,6 +1259,59 @@ namespace DSPCalculatorPlus
                 if (dist > worst) worst = dist;
             }
             return worst;
+        }
+
+        /// <summary>
+        /// Logs the exact local coordinates + item of the worst-covered consumers, so
+        /// a residual in-game "not connected" report can be looked up directly against
+        /// this log instead of guessed at from a screenshot. If the game confirms no
+        /// pole actually sits near a logged coordinate, that pole was placed in our
+        /// data but rejected at paste (collision/terrain our model can't see); if a
+        /// pole IS there but the building still reads unpowered, the fault is in the
+        /// game's own network wiring, not our placement.
+        /// </summary>
+        private static void LogWorstConsumers(BlueprintBuilding[] buildings, int nBuildings,
+            Dictionary<long, List<int>> spatial, List<int> px, List<int> py, int topN)
+        {
+            var worst = new List<double>();
+            var wx = new List<float>();
+            var wy = new List<float>();
+            var wItem = new List<int>();
+            for (int i = 0; i < nBuildings; i++)
+            {
+                BlueprintBuilding b = buildings[i];
+                if (!IsConsumer(b.itemId)) continue;
+                float fx = b.localOffset_x, fy = b.localOffset_y;
+                int bx = FloorDiv((int)Math.Round(fx), Bucket), by = FloorDiv((int)Math.Round(fy), Bucket);
+                double best = double.MaxValue;
+                for (int dbx = -1; dbx <= 1; dbx++)
+                    for (int dby = -1; dby <= 1; dby++)
+                    {
+                        List<int> l;
+                        if (!spatial.TryGetValue(Key(bx + dbx, by + dby), out l)) continue;
+                        foreach (int j in l)
+                        {
+                            double dx = fx - px[j], dy = fy - py[j];
+                            double d2 = dx * dx + dy * dy;
+                            if (d2 < best) best = d2;
+                        }
+                    }
+                double dist = (best == double.MaxValue) ? 999.0 : Math.Sqrt(best);
+                worst.Add(dist); wx.Add(fx); wy.Add(fy); wItem.Add(b.itemId);
+            }
+            var order = new int[worst.Count];
+            for (int i = 0; i < order.Length; i++) order[i] = i;
+            Array.Sort(order, (a, c) => worst[c].CompareTo(worst[a]));
+            int n = Math.Min(topN, order.Length);
+            for (int i = 0; i < n; i++)
+            {
+                int idx = order[i];
+                ItemProto proto = LDB.items.Select(wItem[idx]);
+                string name = proto != null && !string.IsNullOrEmpty(proto.name) ? proto.name : ("item " + wItem[idx]);
+                DSPCalculatorPlusLog.Info("[poles][diag] worst consumer #" + (i + 1) + ": " + name
+                    + " (id " + wItem[idx] + ") at local(" + wx[idx].ToString("0.#") + "," + wy[idx].ToString("0.#")
+                    + ") dist=" + worst[idx].ToString("0.00") + " to nearest pole.");
+            }
         }
 
         /// <summary>Power CONNECT distance of a pole (cached). Two nodes join the
