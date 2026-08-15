@@ -69,6 +69,8 @@ namespace DSPCalculatorPlus
         public readonly ConfigEntry<bool> EnableMultiLaneOverflowFix;
         public readonly ConfigEntry<bool> PushBeltStackingOnOverflow;
         public readonly ConfigEntry<PowerPoleType> AutoPowerPoles;
+        public readonly ConfigEntry<bool> PolesUnderRaisedBelts;
+        public readonly ConfigEntry<bool> SatelliteRescue;
         public readonly ConfigEntry<bool> EnableStackingPlusCompat;
         public readonly ConfigEntry<bool> DebugLog;
 
@@ -124,6 +126,27 @@ namespace DSPCalculatorPlus
                 + "(full coverage, fits any layout). SatelliteSubstation = also drop wide Satellite "
                 + "Substations where their 7x7 footprint fits, filling the rest with Tesla Towers. "
                 + "Off = leave power to you, as stock DSPCalculator does.");
+
+            PolesUnderRaisedBelts = config.Bind(
+                "General",
+                "PolesUnderRaisedBelts",
+                true,
+                "Allow poles on ground tiles that are only occupied by a BELT raised above the pole's "
+                + "height (belt crossings). In dense blueprints DSPCalculator stacks belts overhead, and "
+                + "in-game you can build under a raised belt - so those ground tiles are actually free. "
+                + "This reclaims a large amount of space for poles in big/dense blueprints. If you ever "
+                + "see a pasted pole clipping a low belt, set this false to reserve every belt tile.");
+
+            SatelliteRescue = config.Bind(
+                "General",
+                "SatelliteRescue",
+                true,
+                "Final coverage guarantee for planet-scale blueprints. After filling with the chosen "
+                + "pole, if any machines still have NO free tile within a small pole's reach, drop a few "
+                + "wide-reach Satellite Substations (26-tile radius) to cover them. Only triggers when a "
+                + "small pole genuinely can't finish - normal blueprints stay pure Tesla Tower and never "
+                + "get a substation. Set false to instead leave those last few machines for you to power "
+                + "by hand (if you'd rather not build any substations).");
 
             EnableStackingPlusCompat = config.Bind(
                 "Compatibility",

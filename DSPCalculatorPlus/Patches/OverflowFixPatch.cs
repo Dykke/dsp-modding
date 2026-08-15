@@ -168,7 +168,10 @@ namespace DSPCalculatorPlus
         private static bool MsgBoxPrefix(string __0, string __1, ref object __result)
         {
             if (!_inRetry) return true;
-            DSPCalculatorPlusLog.Warn("[overflow][diag] DSPCalculator dialog during regenerate (suppressed): \"" + __0 + "\" | \"" + __1 + "\"");
+            // Info (DebugLog-gated), not Warn: these are DSPCalculator's own
+            // dialogs during OUR internal retry, suppressed from the game UI -
+            // expected noise, not a real failure (generation succeeds after).
+            DSPCalculatorPlusLog.Info("[overflow][diag] DSPCalculator dialog during regenerate (suppressed): \"" + __0 + "\" | \"" + __1 + "\"");
             __result = null;
             return false;
         }
