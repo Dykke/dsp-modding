@@ -85,6 +85,13 @@ namespace DSPCalculatorPlus
         // planet that is often unbuildable, and the game silently drops the pole at
         // paste while our own math still counts it as covering everything nearby.
         private const int BuiltGroundRadius = 3;
+        // How far (tiles) PlaceLineAligned's free-tile search may drift past a
+        // strip's own known cross-axis extent (cmin/cmax, the row it's actually
+        // trying to cover). Keeps the search near the row itself instead of the
+        // whole blueprint's cross bounds, which for an outermost row bordering
+        // open terrain let the search wander arbitrarily far into ground we have
+        // no way to know is buildable.
+        private const int RowBoundMargin = 3;
 
         // Dedup: OpenBlueprintPasteMode may be called again with the SAME
         // instance; each regenerate builds a fresh BlueprintData, so keying on
@@ -604,6 +611,16 @@ namespace DSPCalculatorPlus
                     occ[cc - cmin] = true;
                 }
 
+                // Clamp the free-tile search to near THIS strip's own known cross extent,
+                // not the whole blueprint's cross bounds. Passing the global crossMin/
+                // crossMax let a packed edge row's search wander out into unknown ground
+                // far past the row itself when its ideal tile was occupied (the usual case,
+                // since that tile is literally a machine) - for the outermost row that
+                // borders open terrain, "unknown ground" is exactly where lava/water live.
+                // A small margin still allows drifting into a real aisle beside the row.
+                int crossLoBound = Math.Max(crossMin, cmin - RowBoundMargin);
+                int crossHiBound = Math.Min(crossMax, cmax + RowBoundMargin);
+
                 // Walk occupied cross-runs; each run = one machine row (or a solid block).
                 int runStart = -1;
                 for (int i = 0; i <= cspan; i++)
@@ -625,8 +642,8 @@ namespace DSPCalculatorPlus
                         if (!HasConsumerNear(consHash, consX, consY, gx, gy, cover)) continue;
                         int px, py;
                         if (FindFreeTile(occupied, field, gx, gy, searchR, hx, hy,
-                                         crossIsY ? lineMin : crossMin, crossIsY ? lineMax : crossMax,
-                                         crossIsY ? crossMin : lineMin, crossIsY ? crossMax : lineMax,
+                                         crossIsY ? lineMin : crossLoBound, crossIsY ? lineMax : crossHiBound,
+                                         crossIsY ? crossLoBound : lineMin, crossIsY ? crossHiBound : lineMax,
                                          underBelt, out px, out py))
                         {
                             if (!HasConsumerNear(consHash, consX, consY, px, py, cover)) continue;
