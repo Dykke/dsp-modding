@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 
 namespace DSPCalculatorPlus
@@ -40,6 +41,23 @@ namespace DSPCalculatorPlus
         private static FieldInfo _fSorterGrade;       // BpSorterInfo.grade
         private static FieldInfo _fBeltsAscending;    // static BpDB.beltsAscending
         private static bool _ready;
+
+        // Vanilla item IDs - confirmed against the live game (StackingPlus's own
+        // belt-proto log lines, and the "Pile Sorter (id 2014)" entries in the
+        // pole diagnostic's worst-consumer log), not guessed. StackingPlus raises
+        // the STACKING count on these same items, it never adds new tier IDs, so
+        // this list needs no update for that compat.
+        private const int BeltMk1Id = 2001, BeltMk2Id = 2002, BeltMk3Id = 2003;
+        private const int SorterMk1Id = 2011, SorterMk2Id = 2012, SorterMk3Id = 2013, SorterMk4Id = 2014;
+
+        // DSPCalculator always hands the paster a blueprint saved under this
+        // temp filename - mirrors PowerPolePatch's own marker/dedup so this
+        // diagnostic never touches a normal manual paste and never double-logs
+        // the same generated blueprint.
+        private const string DspCalcMarker = "DSPCalcBPTemp";
+        private static readonly ConditionalWeakTable<BlueprintData, object> _diagProcessed =
+            new ConditionalWeakTable<BlueprintData, object>();
+        private static readonly object DiagMarker = new object();
 
         /// <summary>
         /// Resolves the DSPCalculator targets and installs the patch. Safe to
@@ -89,6 +107,82 @@ namespace DSPCalculatorPlus
                 prefix: new HarmonyMethod(typeof(TierOverridePatch), nameof(Prefix)),
                 postfix: new HarmonyMethod(typeof(TierOverridePatch), nameof(Postfix)) { priority = Priority.VeryHigh });
             DSPCalculatorPlusLog.Info("[tier] Group A patch installed on BpConnector.GenerateFullBlueprint.");
+
+            var pasteTarget = AccessTools.Method(typeof(PlayerController), "OpenBlueprintPasteMode",
+                new[] { typeof(BlueprintData), typeof(string), typeof(bool) });
+            if (pasteTarget != null)
+            {
+                harmony.Patch(pasteTarget, prefix: new HarmonyMethod(typeof(TierOverridePatch), nameof(DiagPastePrefix)));
+                DSPCalculatorPlusLog.Info("[tier] diagnostic installed on PlayerController.OpenBlueprintPasteMode "
+                    + "(logs the actual belt/sorter tier distribution in every generated blueprint).");
+            }
+        }
+
+        /// <summary>
+        /// Read-only: counts the actual belt/sorter tiers present in the final
+        /// pasted blueprint and compares against the configured override, so a
+        /// forced tier can be confirmed end-to-end instead of trusting that the
+        /// candidate-list filter in Prefix/Postfix above propagated correctly.
+        /// Mirrors PowerPolePatch's own marker filter + dedup so this never
+        /// touches a normal manual paste or double-logs one generated blueprint.
+        /// </summary>
+        private static void DiagPastePrefix(BlueprintData blueprint, string fullPath)
+        {
+            try
+            {
+                if (blueprint == null || blueprint.buildings == null || blueprint.buildings.Length == 0) return;
+                if (string.IsNullOrEmpty(fullPath) || fullPath.IndexOf(DspCalcMarker, StringComparison.OrdinalIgnoreCase) < 0) return;
+                object existing;
+                if (_diagProcessed.TryGetValue(blueprint, out existing)) return;
+                _diagProcessed.Add(blueprint, DiagMarker);
+
+                int b1 = 0, b2 = 0, b3 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0;
+                foreach (BlueprintBuilding building in blueprint.buildings)
+                {
+                    switch (building.itemId)
+                    {
+                        case BeltMk1Id: b1++; break;
+                        case BeltMk2Id: b2++; break;
+                        case BeltMk3Id: b3++; break;
+                        case SorterMk1Id: s1++; break;
+                        case SorterMk2Id: s2++; break;
+                        case SorterMk3Id: s3++; break;
+                        case SorterMk4Id: s4++; break;
+                    }
+                }
+
+                var cfg = Plugin.Config;
+                BeltTier beltTier = cfg.BeltTierOverride.Value;
+                SorterTier sorterTier = cfg.SorterTierOverride.Value;
+
+                DSPCalculatorPlusLog.Info("[tier][diag] config: BeltTierOverride=" + beltTier + " SorterTierOverride=" + sorterTier
+                    + ". Final blueprint belts: Mk1=" + b1 + " Mk2=" + b2 + " Mk3=" + b3
+                    + "; sorters: Mk1=" + s1 + " Mk2=" + s2 + " Mk3=" + s3 + " Mk4(pile)=" + s4 + ".");
+
+                if (beltTier != BeltTier.Auto)
+                {
+                    bool otherBeltsPresent = (beltTier != BeltTier.Mk1 && b1 > 0)
+                        || (beltTier != BeltTier.Mk2 && b2 > 0)
+                        || (beltTier != BeltTier.Mk3 && b3 > 0);
+                    if (otherBeltsPresent)
+                        DSPCalculatorPlusLog.Warn("[tier][diag] BeltTierOverride=" + beltTier + " but belts of OTHER tiers are present in "
+                            + "the final blueprint - the override did not fully apply. Report this line.");
+                }
+                if (sorterTier != SorterTier.Auto)
+                {
+                    bool otherSortersPresent = (sorterTier != SorterTier.Mk1 && s1 > 0)
+                        || (sorterTier != SorterTier.Mk2 && s2 > 0)
+                        || (sorterTier != SorterTier.Mk3 && s3 > 0)
+                        || (sorterTier != SorterTier.Mk4 && s4 > 0);
+                    if (otherSortersPresent)
+                        DSPCalculatorPlusLog.Warn("[tier][diag] SorterTierOverride=" + sorterTier + " but sorters of OTHER tiers are "
+                            + "present in the final blueprint - the override did not fully apply. Report this line.");
+                }
+            }
+            catch (Exception ex)
+            {
+                DSPCalculatorPlusLog.Error("[tier][diag] tier-distribution diagnostic failed (harmless, informational only): " + ex);
+            }
         }
 
         // __state (when non-null) = { solution, originalBelts-or-null, originalSorters-or-null }.
