@@ -15,12 +15,15 @@ namespace DSPCalculatorPlus
     /// (<c>PlayerController.OpenBlueprintPasteMode</c>, filtered to
     /// DSPCalculator's own temp blueprints) and appends power-pole buildings.
     ///
-    /// <b>Auto (default) mixes pole types for full coverage:</b> it first drops
-    /// Satellite Substations wherever their (large) footprint actually fits -
-    /// each covers a huge radius - then fills every remaining uncovered spot
-    /// with Tesla Towers, whose 1x1 footprint slots into the belt aisles a
-    /// dense layout always has. So the whole blueprint ends up powered even
-    /// though substations alone only fit around the open edges.
+    /// <b>Tesla Tower (default, only real mode) fills the blueprint for full
+    /// coverage:</b> one pole per detected machine line where banding is clear,
+    /// falling back to a uniform grid otherwise, plus a coverage backfill pass
+    /// that guarantees every consumer is reached. Its 1x1 footprint slots into
+    /// whatever belt aisle a dense layout has, so it fits everywhere. (An
+    /// earlier version also mixed in wide-reach Satellite Substations as a
+    /// fallback for spots Tesla couldn't reach; removed after dozens of test
+    /// generations from ~300 to ~73,000 buildings never once triggered that
+    /// fallback - Tesla alone always reached full coverage with real margin.)
     ///
     /// Collision-safe by construction: every existing building's footprint is
     /// reserved using the game's own multi-collider build footprint
@@ -42,7 +45,6 @@ namespace DSPCalculatorPlus
         // unlock checks, so a wrong/removed ID degrades to "no poles added".
         private const int TeslaTowerId = 2201;
         private const int WirelessPowerTowerId = 2202;
-        private const int SatelliteSubstationId = 2212;
         // Any conveyor belt (all tiers share collider geometry) - used to measure how
         // far a belt's underside sits below its altitude, for the under-belt check.
         private const int ConveyorBeltId = 2003;
@@ -156,17 +158,12 @@ namespace DSPCalculatorPlus
         {
             LogPoleDiagnosticOnce();
 
-            bool useSat = (mode == PowerPoleType.SatelliteSubstation) && IsUsable(SatelliteSubstationId);
-            // Tesla always does the grid-fill + backfill (cheap, 1x1, fits
-            // anywhere), so coverage is guaranteed in BOTH modes; substations
-            // only ADD wide coverage where they fit. Fall back to substation-only
-            // if Tesla somehow isn't usable.
             bool useTesla = IsUsable(TeslaTowerId);
 
-            if (!useSat && !useTesla)
+            if (!useTesla)
             {
-                DSPCalculatorPlusLog.Warn("[poles] no usable pole for mode " + mode + " (item unavailable or not unlocked) - none added. "
-                    + "Unlock the pole, pick a different AutoPowerPoles value, or set it to Off.");
+                DSPCalculatorPlusLog.Warn("[poles] Tesla Tower is unavailable or not unlocked - no poles added. "
+                    + "Unlock it, or set AutoPowerPoles to Off.");
                 return;
             }
 
@@ -250,64 +247,36 @@ namespace DSPCalculatorPlus
             }
 
             var poles = new List<BlueprintBuilding>();
-            var satCX = new List<int>();
-            var satCY = new List<int>();
-            float satCover = 0f;
-            int satGaps = 0, teslaGaps = 0;
-            int satPlaced = 0, teslaPlaced = 0;
 
-            // 2. Satellite pass - wide coverage where the big footprint fits.
-            //    Records each placed centre so the tesla pass can skip it.
-            if (useSat)
+            // 2. Tesla pass. Lay one regular pole row down each detected machine
+            //    line (even, one-per-line, how a player does it by hand) instead
+            //    of a drifting uniform grid. Falls back to the grid if the layout
+            //    has no clear banding.
+            ItemProto teslaProto = LDB.items.Select(TeslaTowerId);
+            PrefabDesc tpd = teslaProto.prefabDesc;
+            bool crossIsY; List<int> bands;
+            if (DetectBands(buildings, startCount, bbMinX, bbMaxX, bbMinY, bbMaxY, out crossIsY, out bands))
             {
-                ItemProto satProto = LDB.items.Select(SatelliteSubstationId);
-                PrefabDesc spd = satProto.prefabDesc;
-                satCover = spd.powerCoverRadius;
-                satGaps = PlaceGrid(SatelliteSubstationId, spd, occupied, builtGround, startCount, poles, field, underBelt,
-                          bbMinX, bbMaxX, bbMinY, bbMaxY,
-                          recordCX: satCX, recordCY: satCY,
-                          skipCX: null, skipCY: null, skipRadius: 0f);
-                satPlaced = poles.Count;
+                PlaceLineAligned(TeslaTowerId, tpd, occupied, builtGround, startCount, poles, field, underBelt,
+                          consHash, consX, consY, crossIsY, bands,
+                          crossIsY ? bbMinX : bbMinY, crossIsY ? bbMaxX : bbMaxY,   // line-axis bounds
+                          crossIsY ? bbMinY : bbMinX, crossIsY ? bbMaxY : bbMaxX);  // cross-axis bounds
+                DSPCalculatorPlusLog.Info("[poles] line-aligned placement: rows run along " + (crossIsY ? "X" : "Y")
+                    + " (" + bands.Count + " global block-line(s); machine rows detected LOCALLY per line-strip); one pole per machine line.");
             }
-
-            // 3. Tesla pass. In pure-Tesla mode, lay one regular pole row down each
-            //    detected machine line (even, one-per-line, how a player does it by
-            //    hand) instead of a drifting uniform grid. Falls back to the grid if
-            //    the layout has no clear banding, or when substations are also in use
-            //    (there the grid's satellite-skip still applies).
-            if (useTesla)
+            else
             {
-                ItemProto teslaProto = LDB.items.Select(TeslaTowerId);
-                PrefabDesc tpd = teslaProto.prefabDesc;
-                bool crossIsY; List<int> bands;
-                if (!useSat && DetectBands(buildings, startCount, bbMinX, bbMaxX, bbMinY, bbMaxY, out crossIsY, out bands))
-                {
-                    teslaGaps = PlaceLineAligned(TeslaTowerId, tpd, occupied, builtGround, startCount, poles, field, underBelt,
-                              consHash, consX, consY, crossIsY, bands,
-                              crossIsY ? bbMinX : bbMinY, crossIsY ? bbMaxX : bbMaxY,   // line-axis bounds
-                              crossIsY ? bbMinY : bbMinX, crossIsY ? bbMaxY : bbMaxX);  // cross-axis bounds
-                    DSPCalculatorPlusLog.Info("[poles] line-aligned placement: rows run along " + (crossIsY ? "X" : "Y")
-                        + " (" + bands.Count + " global block-line(s); machine rows detected LOCALLY per line-strip); one pole per machine line.");
-                }
-                else
-                {
-                    teslaGaps = PlaceGrid(TeslaTowerId, tpd, occupied, builtGround, startCount, poles, field, underBelt,
-                              bbMinX, bbMaxX, bbMinY, bbMaxY,
-                              recordCX: null, recordCY: null,
-                              skipCX: satCX, skipCY: satCY, skipRadius: (float)(satCover * CoverSafety));
-                }
-                teslaPlaced = poles.Count - satPlaced;
+                PlaceGrid(TeslaTowerId, tpd, occupied, builtGround, startCount, poles, field, underBelt,
+                          bbMinX, bbMaxX, bbMinY, bbMaxY);
             }
+            int teslaPlaced = poles.Count;
 
-            // 4. Coverage backfill - GUARANTEE every building is within a pole's
-            //    radius. The grid can miss spots (blocked cells, coverage-skip
-            //    edges); this walks every building and drops a fill pole near any
-            //    that no placed pole covers. Fill pole = Tesla for Auto/Tesla
-            //    (1x1, fits anywhere), Substation for substation-only mode.
-            int fillPoleId = (mode == PowerPoleType.SatelliteSubstation)
-                ? SatelliteSubstationId
-                : (useTesla ? TeslaTowerId : SatelliteSubstationId);
-            // 4. Coverage backfill with the CONSERVATIVE check (CoverSafety) so it
+            // 3. Coverage backfill - GUARANTEE every building is within a pole's
+            //    radius. The grid can miss spots (blocked cells, banding edges);
+            //    this walks every building and drops a fill Tesla near any that
+            //    no placed pole covers.
+            const int fillPoleId = TeslaTowerId;
+            // 3. Coverage backfill with the CONSERVATIVE check (CoverSafety) so it
             //    densifies aggressively = best real coverage. Its own gap count is
             //    pessimistic, so we discard it and recount honestly below.
             // Placement passes cover ALL buildings, belts included. Belts blanket
@@ -328,28 +297,20 @@ namespace DSPCalculatorPlus
                                               fillPoleId, CoverSafety, true, true, bbMinX, bbMaxX, bbMinY, bbMaxY, out _);
                 // 4a. Relaxed Tesla pass at the REAL reach: for the genuine gaps the
                 //     conservative pass couldn't reach (~8 tiles), a free tile a bit
-                //     farther (~10) still really covers them - place a cheap Tesla
-                //     there before falling back to a Substation.
+                //     farther (~10) still really covers them.
                 backfilled += BackfillCoverage(buildings, startCount, occupied, builtGround, poles, startCount, field, underBelt,
                                                fillPoleId, RescueCoverSafety, true, true, bbMinX, bbMaxX, bbMinY, bbMaxY, out _);
             }
 
-            // 4b. Honest recount + optional satellite rescue, both at the ACCURATE
-            //     real reach (RescueCoverSafety) and counting POWER CONSUMERS ONLY
-            //     (consumersOnly=true) - belts don't consume power, so the log gap
-            //     count reflects the real handful of machines/sorters, not the
-            //     thousands of edge belts. This second pass:
-            //     - counts only the machines the game truly won't power, and
-            //     - if SatelliteRescue is on, drops a few wide Substations on those
-            //       genuine gaps (26-tile reach). Because it uses the real reach AND
-            //       targets consumers, it never wastes a substation on a belt edge or
-            //       a machine teslas already cover.
-            bool satUsable = IsUsable(SatelliteSubstationId);
-            bool doRescue = Plugin.Config.SatelliteRescue.Value && satUsable && fillPoleId != SatelliteSubstationId;
-            int countPoleId = satUsable ? SatelliteSubstationId : fillPoleId;
-            int uncovered = 0;
-            int rescued = BackfillCoverage(buildings, startCount, occupied, builtGround, poles, startCount, field, underBelt,
-                                           countPoleId, RescueCoverSafety, doRescue, true, bbMinX, bbMaxX, bbMinY, bbMaxY, out uncovered);
+            // 4b. Honest recount at the ACCURATE real reach (RescueCoverSafety),
+            //     counting POWER CONSUMERS ONLY (consumersOnly=true) - belts don't
+            //     consume power, so the log gap count reflects the real handful of
+            //     machines/sorters that genuinely have no free tile within reach of
+            //     any pole, not the thousands of edge belts. Count-only (placeMode
+            //     false): every free-tile option has already been tried above.
+            int uncovered;
+            BackfillCoverage(buildings, startCount, occupied, builtGround, poles, startCount, field, underBelt,
+                             fillPoleId, RescueCoverSafety, false, true, bbMinX, bbMaxX, bbMinY, bbMaxY, out uncovered);
 
             if (poles.Count == 0)
             {
@@ -377,17 +338,15 @@ namespace DSPCalculatorPlus
             LogWorstCoverage(buildings, startCount, poles, underBelt);
             LogConnectivity(poles, underBelt);
 
-            string fillName = fillPoleId == SatelliteSubstationId ? "Substation" : "Tesla";
             DSPCalculatorPlusLog.Info("[poles] mode=" + mode + " added " + poles.Count + " pole(s) over " + startCount
-                + " buildings: " + satPlaced + " Satellite Substation + " + teslaPlaced + " Tesla Tower (grid)"
-                + (backfilled > 0 ? " + " + backfilled + " " + fillName + " (backfill)" : "")
-                + (rescued > 0 ? " + " + rescued + " Satellite Substation (rescue)" : "")
+                + " buildings: " + teslaPlaced + " Tesla Tower (grid)"
+                + (backfilled > 0 ? " + " + backfilled + " Tesla Tower (backfill)" : "")
                 + (pruned > 0 ? " - " + pruned + " redundant (pruned)" : "")
                 + (uncovered > 0 ? "; " + uncovered + " machine area(s) still UNCOVERED (no free tile within range)" : "; full coverage")
                 + ".");
             if (uncovered > 0)
-                DSPCalculatorPlusLog.Warn("[poles] " + uncovered + " machine area(s) still have no free tile within reach of any pole "
-                    + "(even a wide Substation couldn't fit nearby) - power those few by hand.");
+                DSPCalculatorPlusLog.Warn("[poles] " + uncovered + " machine area(s) still have no free tile within reach of any Tesla Tower "
+                    + "- power those few by hand.");
         }
 
         // ---- grid placement ------------------------------------------------
@@ -395,17 +354,10 @@ namespace DSPCalculatorPlus
         /// <summary>
         /// Places poles of one type on a coverage grid across the bbox, each
         /// snapped to the nearest free tile; returns the number of grid points
-        /// that had no free tile. Placed centres are appended to
-        /// <paramref name="recordCX"/>/<paramref name="recordCY"/> when given.
-        /// When <paramref name="skipCX"/>/<paramref name="skipCY"/> +
-        /// <paramref name="skipRadius"/> are supplied, grid points safely inside
-        /// one of those existing poles' radius are skipped, so a fill pass only
-        /// adds poles where coverage is actually missing.
+        /// that had no free tile.
         /// </summary>
         private static int PlaceGrid(int poleId, PrefabDesc pd, HashSet<long> occupied, HashSet<long> builtGround, int indexBase,
-            List<BlueprintBuilding> outPoles, PoleField field, HashSet<long> underBelt, int bbMinX, int bbMaxX, int bbMinY, int bbMaxY,
-            List<int> recordCX, List<int> recordCY,
-            List<int> skipCX, List<int> skipCY, float skipRadius)
+            List<BlueprintBuilding> outPoles, PoleField field, HashSet<long> underBelt, int bbMinX, int bbMaxX, int bbMinY, int bbMaxY)
         {
             float cover = pd.powerCoverRadius;
             float connect = pd.powerConnectDistance;
@@ -437,17 +389,6 @@ namespace DSPCalculatorPlus
             int hx, hy;
             GetTileHalfExtents(pd, poleId, 0f, out hx, out hy);
 
-            // Skip a fill point only when it is safely (minus ~one cell) inside a
-            // recorded pole's radius, so no edge tile is left unpowered.
-            bool doSkip = skipCX != null && skipCX.Count > 0 && skipRadius > 0.1f;
-            double skipR2 = 0.0;
-            if (doSkip)
-            {
-                double safe = skipRadius - Math.Max(cellW, cellH) * 0.6;
-                if (safe < 0) safe = 0;
-                skipR2 = safe * safe;
-            }
-
             int gaps = 0;
             for (int ix = 0; ix < nx; ix++)
             {
@@ -456,8 +397,6 @@ namespace DSPCalculatorPlus
                 {
                     int gy = bbMinY + (int)Math.Round((iy + 0.5) * cellH);
 
-                    if (doSkip && IsCovered(gx, gy, skipCX, skipCY, skipR2)) continue;
-
                     int px, py;
                     if (FindFreeTile(occupied, field, gx, gy, searchR, hx, hy, bbMinX, bbMaxX, bbMinY, bbMaxY, underBelt, out px, out py))
                     {
@@ -465,7 +404,6 @@ namespace DSPCalculatorPlus
                         outPoles.Add(MakePole(poleId, pd.modelIndex, px, py, indexBase + outPoles.Count));
                         MarkOccupied(occupied, px, py, hx, hy);
                         field.Add(px, py);
-                        if (recordCX != null && recordCY != null) { recordCX.Add(px); recordCY.Add(py); }
                     }
                     else gaps++;
                 }
@@ -697,18 +635,6 @@ namespace DSPCalculatorPlus
             for (int dx = -radius; dx <= radius; dx++)
                 for (int dy = -radius; dy <= radius; dy++)
                     if (builtGround.Contains(Key(x + dx, y + dy))) return true;
-            return false;
-        }
-
-        private static bool IsCovered(int x, int y, List<int> cx, List<int> cy, double r2)
-        {
-            if (r2 <= 0.0) return false;
-            for (int i = 0; i < cx.Count; i++)
-            {
-                double dx = x - cx[i];
-                double dy = y - cy[i];
-                if (dx * dx + dy * dy <= r2) return true;
-            }
             return false;
         }
 
@@ -1558,7 +1484,6 @@ namespace DSPCalculatorPlus
         {
             if (_diagLogged) return;
             _diagLogged = true;
-            LogPole("Satellite Substation", SatelliteSubstationId);
             LogPole("Wireless Power Tower", WirelessPowerTowerId);
             LogPole("Tesla Tower", TeslaTowerId);
         }

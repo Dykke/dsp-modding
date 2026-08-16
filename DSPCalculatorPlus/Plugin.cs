@@ -97,11 +97,10 @@ namespace DSPCalculatorPlus
                 // EnableMultiLaneOverflowFix.
                 OverflowFixPatch.Apply(_harmony);
 
-                // Group C: auto power poles. Appends Tesla Tower / Satellite
-                // Substation buildings covering the generated blueprint's
-                // machines, on free tiles only. Targets the game's paste entry
-                // point, filtered to DSPCalculator blueprints. Gated by
-                // AutoPowerPoles.
+                // Group C: auto power poles. Appends Tesla Tower buildings
+                // covering the generated blueprint's machines, on free tiles
+                // only. Targets the game's paste entry point, filtered to
+                // DSPCalculator blueprints. Gated by AutoPowerPoles.
                 PowerPolePatch.Apply(_harmony);
 
                 // StackingPlus compat: sync DSPCalculator's stacking cap to the

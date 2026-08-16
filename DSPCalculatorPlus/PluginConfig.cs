@@ -36,24 +36,24 @@ namespace DSPCalculatorPlus
     }
 
     /// <summary>
-    /// Which electric pole (if any) DSPCalculatorPlus auto-places over a
-    /// generated blueprint to power its machines. DSPCalculator itself never
-    /// adds power infrastructure, so the user normally hand-places poles.
-    /// <see cref="Off"/> keeps that manual behaviour. <see cref="TeslaTower"/>
-    /// (default) fills the whole blueprint with cheap 1x1 Tesla Towers -
-    /// guaranteed full coverage that fits any layout.
-    /// <see cref="SatelliteSubstation"/> additionally drops wide-coverage
-    /// Satellite Substations wherever their 7x7 footprint fits, then still
-    /// fills the rest with Tesla Towers (substations alone can't cover a dense
-    /// layout, and cost far more). Poles only land on tiles no machine/belt
+    /// Whether DSPCalculatorPlus auto-places electric poles over a generated
+    /// blueprint to power its machines. DSPCalculator itself never adds power
+    /// infrastructure, so the user normally hand-places poles. <see cref="Off"/>
+    /// keeps that manual behaviour. <see cref="TeslaTower"/> (default) fills
+    /// the whole blueprint with cheap 1x1 Tesla Towers - guaranteed full
+    /// coverage that fits any layout. Poles only land on tiles no machine/belt
     /// occupies and never closer than the game's minimum pole spacing, so the
     /// addition never breaks the paste.
+    ///
+    /// (Satellite Substation support was removed - across dozens of test
+    /// generations from ~300 to ~73,000 buildings, Tesla-only placement
+    /// always reached full coverage with real margin and the substation
+    /// rescue fallback never once triggered, so it was dead weight.)
     /// </summary>
     public enum PowerPoleType
     {
         Off = 0,
         TeslaTower = 1,
-        SatelliteSubstation = 2,
     }
 
     /// <summary>
@@ -70,7 +70,6 @@ namespace DSPCalculatorPlus
         public readonly ConfigEntry<bool> PushBeltStackingOnOverflow;
         public readonly ConfigEntry<PowerPoleType> AutoPowerPoles;
         public readonly ConfigEntry<bool> PolesUnderRaisedBelts;
-        public readonly ConfigEntry<bool> SatelliteRescue;
         public readonly ConfigEntry<bool> EnableStackingPlusCompat;
         public readonly ConfigEntry<bool> DebugLog;
 
@@ -123,9 +122,7 @@ namespace DSPCalculatorPlus
                 + "(DSPCalculator never adds any). Poles land only on empty tiles - never on a "
                 + "machine/belt and never closer than the game's minimum pole spacing - so they "
                 + "can't break the paste. TeslaTower (default) = fill with cheap 1x1 Tesla Towers "
-                + "(full coverage, fits any layout). SatelliteSubstation = also drop wide Satellite "
-                + "Substations where their 7x7 footprint fits, filling the rest with Tesla Towers. "
-                + "Off = leave power to you, as stock DSPCalculator does.");
+                + "(full coverage, fits any layout). Off = leave power to you, as stock DSPCalculator does.");
 
             PolesUnderRaisedBelts = config.Bind(
                 "General",
@@ -136,17 +133,6 @@ namespace DSPCalculatorPlus
                 + "in-game you can build under a raised belt - so those ground tiles are actually free. "
                 + "This reclaims a large amount of space for poles in big/dense blueprints. If you ever "
                 + "see a pasted pole clipping a low belt, set this false to reserve every belt tile.");
-
-            SatelliteRescue = config.Bind(
-                "General",
-                "SatelliteRescue",
-                true,
-                "Final coverage guarantee for planet-scale blueprints. After filling with the chosen "
-                + "pole, if any machines still have NO free tile within a small pole's reach, drop a few "
-                + "wide-reach Satellite Substations (26-tile radius) to cover them. Only triggers when a "
-                + "small pole genuinely can't finish - normal blueprints stay pure Tesla Tower and never "
-                + "get a substation. Set false to instead leave those last few machines for you to power "
-                + "by hand (if you'd rather not build any substations).");
 
             EnableStackingPlusCompat = config.Bind(
                 "Compatibility",

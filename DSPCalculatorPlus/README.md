@@ -40,10 +40,10 @@ on immediately.
   raises DSPCalculator's belt-stacking cap and regenerates. The resulting
   blueprint assumes that stacking - you need matching pile/proliferator
   tech to run it at full rate.
-- **Auto power poles.** Every generated blueprint gets Tesla Towers (and
-  optionally Satellite Substations) placed automatically - one pole per
-  machine line, the way a player lays them by hand - so you paste and
-  wire in once instead of hand-placing hundreds of poles.
+- **Auto power poles.** Every generated blueprint gets Tesla Towers placed
+  automatically - one pole per machine line, the way a player lays them by
+  hand - so you paste and wire in once instead of hand-placing hundreds of
+  poles.
 - **StackingPlus sync (optional).** When StackingPlus is also installed,
   detected automatically - the overflow fix can then push belt-stacking
   past vanilla 4x to StackingPlus's raised cap, letting more
@@ -101,9 +101,8 @@ read at launch).
 | `General > SorterTierOverride` | `Auto` | Force sorter tier (Auto/Mk1-Mk4). Below Mk4 bypasses pile-sorter output stacking. |
 | `General > EnableMultiLaneOverflowFix` | `true` | Externalize an over-throughput item as a logistics input instead of failing generation. |
 | `General > PushBeltStackingOnOverflow` | `true` | Last-resort: raise belt-stacking and regenerate when a block's output still can't carry a byproduct. |
-| `General > AutoPowerPoles` | `TeslaTower` | `Off` / `TeslaTower` / `SatelliteSubstation` - auto-place power poles over generated blueprints. |
+| `General > AutoPowerPoles` | `TeslaTower` | `Off` / `TeslaTower` - auto-place Tesla Tower power poles over generated blueprints. |
 | `General > PolesUnderRaisedBelts` | `true` | Allow poles on ground tiles only occupied by a belt raised above the pole's height (belt crossings). |
-| `General > SatelliteRescue` | `true` | Drop a few wide-reach Satellite Substations if any machine still has no small-pole coverage after filling. |
 | `Compatibility > EnableStackingPlusCompat` | `true` | Sync DSPCalculator's stacking cap to StackingPlus's raised cap when it's installed. No effect otherwise. |
 | `Diagnostics > DebugLog` | `false` | Verbose logging, including exact coordinates of the worst-covered machines for the auto-pole feature. |
 
