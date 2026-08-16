@@ -119,7 +119,6 @@ MIT. See `LICENSE` for the full text.
 ## Credits
 
 - `PlanetwideAmmoSupply` by `zicarius`.
-- Built on the workspace template at `cursor-stuff\templates\mod-template\`.
 
 ### Support
 

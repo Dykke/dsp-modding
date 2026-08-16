@@ -90,7 +90,6 @@ MIT / GPL-3.0 / etc. Pick one and put the full text in `LICENSE`.
 ## Credits
 
 - `StackingPlus` by `zicarius`.
-- Built on the workspace template at `cursor-stuff\templates\mod-template\`.
 
 ### Support
 

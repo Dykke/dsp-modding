@@ -49,7 +49,8 @@ on immediately.
   past vanilla 4x to StackingPlus's raised cap, letting more
   high-throughput blueprints succeed without externalizing.
 
-## Installation
+<details>
+<summary><strong>Installation</strong></summary>
 
 **Via r2modman / Thunderstore Mod Manager (recommended):**
 1. Install [r2modman](https://thunderstore.io/package/ebkr/r2modman/) or the Thunderstore Mod Manager.
@@ -66,6 +67,8 @@ on immediately.
 4. Launch the game once. BepInEx creates
    `BepInEx\config\com.zicarius.DSPCalculatorPlus.cfg` with the defaults.
 5. (Optional) Edit that .cfg to taste - **with the game closed**, then relaunch.
+
+</details>
 
 ## Before you install
 
@@ -120,6 +123,11 @@ read at launch).
   itself generates (it detects DSPCalculator's own temp blueprint
   internally) - a normal manual blueprint paste is never modified, so it
   should be safe alongside any other blueprint/building mod.
+- **Suggested pairing:** [GalacticScale](https://thunderstore.io/c/dyson-sphere-program/p/Galactic_Scale/GalacticScale/)
+  (unrelated third-party mod) raises planet radius well past vanilla's
+  ~200 - this mod's auto-pole and overflow-fix features earn their keep
+  most on exactly that kind of oversized, high-density production line.
+  Not required, just a natural fit if you're building big.
 - **Multiplayer:** built and tested for singleplayer; untested in Nebula
   multiplayer.
 
@@ -142,7 +150,8 @@ read at launch).
   which give the exact local coordinates of the hardest-to-cover
   machines.
 
-## Troubleshooting
+<details>
+<summary><strong>Troubleshooting</strong></summary>
 
 **Mod doesn't load:**
 - Ensure the file is in `BepInEx\plugins\DSPCalculatorPlus\` (not `Mods\`).
@@ -167,6 +176,8 @@ read at launch).
   still fail generation cleanly by design - reduce its demand or change
   its recipe instead.
 
+</details>
+
 ## License
 
 MIT. See `LICENSE` for the full text.
@@ -176,7 +187,6 @@ MIT. See `LICENSE` for the full text.
 - `DSPCalculatorPlus` by `zicarius`. Built on DSPCalculator by its
   author (`jinxOAO`) via Harmony patches and reflection only - no
   DSPCalculator source is copied, forked, or redistributed.
-- Built on the workspace template at `cursor-stuff\templates\mod-template\`.
 
 ### Support
 
