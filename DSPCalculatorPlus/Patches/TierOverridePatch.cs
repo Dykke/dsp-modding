@@ -59,6 +59,17 @@ namespace DSPCalculatorPlus
             new ConditionalWeakTable<BlueprintData, object>();
         private static readonly object DiagMarker = new object();
 
+        // Set by Prefix (the pass right before generation), read by DiagPastePrefix
+        // (the pass at paste time, after generation) so the end-to-end diagnostic
+        // knows WHY the final blueprint doesn't match a requested tier: a genuine
+        // mismatch (something actually wrong) vs a requested tier that was
+        // correctly unavailable (locked/not unlocked) and safely fell back to
+        // Auto - the two look identical from the final building counts alone, but
+        // only one is a bug. Reset at the start of every Prefix call so a stale
+        // value from an earlier generation can never leak into a later one's diag.
+        private static bool _lastBeltFellBack;
+        private static bool _lastSorterFellBack;
+
         /// <summary>
         /// Resolves the DSPCalculator targets and installs the patch. Safe to
         /// call once from Plugin.Awake (DSPCalculator is a hard dependency, so
@@ -155,11 +166,18 @@ namespace DSPCalculatorPlus
                 BeltTier beltTier = cfg.BeltTierOverride.Value;
                 SorterTier sorterTier = cfg.SorterTierOverride.Value;
 
-                DSPCalculatorPlusLog.Info("[tier][diag] config: BeltTierOverride=" + beltTier + " SorterTierOverride=" + sorterTier
+                DSPCalculatorPlusLog.Info("[tier][diag] config: BeltTierOverride=" + beltTier
+                    + (_lastBeltFellBack ? " (UNAVAILABLE for this blueprint - correctly fell back to Auto instead of forcing a locked/missing tier)" : "")
+                    + " SorterTierOverride=" + sorterTier
+                    + (_lastSorterFellBack ? " (UNAVAILABLE for this blueprint - correctly fell back to Auto)" : "")
                     + ". Final blueprint belts: Mk1=" + b1 + " Mk2=" + b2 + " Mk3=" + b3
                     + "; sorters: Mk1=" + s1 + " Mk2=" + s2 + " Mk3=" + s3 + " Mk4(pile)=" + s4 + ".");
 
-                if (beltTier != BeltTier.Auto)
+                // Only a genuine mismatch is worth a warning - not the case where
+                // Prefix already correctly detected the tier was unavailable and
+                // deliberately left it on Auto (that is respecting tech-unlock
+                // status working as intended, not a bug).
+                if (beltTier != BeltTier.Auto && !_lastBeltFellBack)
                 {
                     bool otherBeltsPresent = (beltTier != BeltTier.Mk1 && b1 > 0)
                         || (beltTier != BeltTier.Mk2 && b2 > 0)
@@ -168,7 +186,7 @@ namespace DSPCalculatorPlus
                         DSPCalculatorPlusLog.Warn("[tier][diag] BeltTierOverride=" + beltTier + " but belts of OTHER tiers are present in "
                             + "the final blueprint - the override did not fully apply. Report this line.");
                 }
-                if (sorterTier != SorterTier.Auto)
+                if (sorterTier != SorterTier.Auto && !_lastSorterFellBack)
                 {
                     bool otherSortersPresent = (sorterTier != SorterTier.Mk1 && s1 > 0)
                         || (sorterTier != SorterTier.Mk2 && s2 > 0)
@@ -194,6 +212,8 @@ namespace DSPCalculatorPlus
             var cfg = Plugin.Config;
             BeltTier beltTier = cfg.BeltTierOverride.Value;
             SorterTier sorterTier = cfg.SorterTierOverride.Value;
+            _lastBeltFellBack = false;
+            _lastSorterFellBack = false;
             if (beltTier == BeltTier.Auto && sorterTier == SorterTier.Auto) return;
 
             object solution = _fSolution.GetValue(__instance);
@@ -211,6 +231,7 @@ namespace DSPCalculatorPlus
                     originalBelts = current;
                     _fBeltsAvailable.SetValue(solution, filtered);
                 }
+                else _lastBeltFellBack = true;
             }
 
             if (sorterTier != SorterTier.Auto)
@@ -222,6 +243,7 @@ namespace DSPCalculatorPlus
                     originalSorters = current;
                     _fSortersAvailable.SetValue(solution, filtered);
                 }
+                else _lastSorterFellBack = true;
             }
 
             if (originalBelts != null || originalSorters != null)
