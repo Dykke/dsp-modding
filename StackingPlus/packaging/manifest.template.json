@@ -1,8 +1,8 @@
 ﻿{
   "name": "StackingPlus",
-  "version_number": "1.0.0",
+  "version_number": "0.1.0",
   "website_url": "https://github.com/Dykke/dsp-modding",
-  "description": "Short one-line description shown on the Thunderstore page.",
+  "description": "Raises DSP's cargo stacking caps beyond vanilla 4x (sorter, station piler, delivery package) plus an optional belt-speed boost. Pairs with DSPCalculatorPlus for high-throughput blueprints.",
   "dependencies": [
     "xiaoye97-BepInEx-5.4.17"
   ]

@@ -180,6 +180,26 @@ namespace StackingPlus
             {
                 // Rewrite existing belts' path segment speeds on save load.
                 TryPatch(typeof(CargoTraffic), "Import", postfix: HM(typeof(BeltSpeedPatch), nameof(BeltSpeedPatch.AfterCargoTrafficImport)));
+                // Visual fix (secondary): correct the tread-animation rate on
+                // every build/paste/select (SetBeltState) so a boosted belt's
+                // scroll rate matches its real tier. Purely cosmetic.
+                TryPatch(typeof(CargoTraffic), "SetBeltState", prefix: HM(typeof(BeltSpeedPatch), nameof(BeltSpeedPatch.BeforeSetBeltState)));
+                // Visual fix (root cause): AlterBeltRenderer buckets beltComponent
+                // .speed into <=1/==2/>=3 to pick the MESH batch - a boosted
+                // Mk.II (speed 4) lands in Mk.III's bucket and gets Mk.III's
+                // mesh. Snapshot/restore the real speed around this one call so
+                // the mesh-bucket decision uses the true tier; throughput
+                // (beltPool.speed at all other times) is unaffected.
+                TryPatch(typeof(CargoTraffic), "AlterBeltRenderer",
+                    prefix: HM(typeof(BeltSpeedPatch), nameof(BeltSpeedPatch.BeforeAlterBeltRenderer)),
+                    postfix: HM(typeof(BeltSpeedPatch), nameof(BeltSpeedPatch.AfterAlterBeltRenderer)));
+                // Visual fix (third mechanism): the small path head/rear node
+                // marker reads CargoPath.headSpeed/rearSpeed (= scaled chunk
+                // speed) purely for cosmetics - used nowhere else in the
+                // codebase, so correcting the getters is throughput-safe.
+                var afterHeadRear = HM(typeof(BeltSpeedPatch), nameof(BeltSpeedPatch.AfterHeadOrRearSpeed));
+                TryPatchProperty(typeof(CargoPath), "headSpeed", afterHeadRear);
+                TryPatchProperty(typeof(CargoPath), "rearSpeed", afterHeadRear);
             }
         }
 
@@ -187,6 +207,25 @@ namespace StackingPlus
         {
             return new HarmonyMethod(type.GetMethod(method,
                 BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic));
+        }
+
+        private void TryPatchProperty(Type type, string propertyName, HarmonyMethod postfix)
+        {
+            try
+            {
+                var mi = AccessTools.PropertyGetter(type, propertyName);
+                if (mi == null)
+                {
+                    StackingPlusLog.Warn("[compat] property getter not found: " + type.Name + "." + propertyName + " - patch skipped.");
+                    return;
+                }
+                harmony.Patch(mi, postfix: postfix);
+                StackingPlusLog.Info("[patch] patched " + type.Name + "." + propertyName + " (getter)");
+            }
+            catch (Exception ex)
+            {
+                StackingPlusLog.Error("[patch] failed to patch " + type.Name + "." + propertyName + " getter: " + ex);
+            }
         }
 
         private void TryPatch(Type type, string method, HarmonyMethod prefix = null, HarmonyMethod postfix = null)
@@ -233,6 +272,8 @@ namespace StackingPlus
                 new[] { "GameData", "OnInserterTechChange" },
                 new[] { "GameMain", "Begin" },
                 new[] { "CargoTraffic", "Import" },
+                new[] { "CargoTraffic", "SetBeltState" },
+                new[] { "CargoTraffic", "AlterBeltRenderer" },
             };
             foreach (var t in targets)
             {
