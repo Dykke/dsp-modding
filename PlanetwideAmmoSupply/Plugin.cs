@@ -162,7 +162,13 @@ namespace PlanetwideAmmoSupply
                 {
                     var type = AccessTools.TypeByName(t[0]);
                     if (type == null) { PlanetwideAmmoSupplyLog.Warn("[diag] Type not found: " + t[0]); continue; }
-                    var method = AccessTools.Method(type, t[1]);
+                    // StorageComponent.AddItem has 6 overloads sharing that name - an
+                    // unqualified AccessTools.Method(type, name) lookup throws
+                    // "Ambiguous match" for it. This is the one this mod actually calls
+                    // (see DefenseSystemSupplyPatch.cs): AddItem(int, int, int, out int, bool).
+                    var method = t[0] == "StorageComponent" && t[1] == "AddItem"
+                        ? AccessTools.Method(type, t[1], new[] { typeof(int), typeof(int), typeof(int), typeof(int).MakeByRefType(), typeof(bool) })
+                        : AccessTools.Method(type, t[1]);
                     if (method == null) { PlanetwideAmmoSupplyLog.Warn("[diag] Method not found: " + t[0] + "." + t[1]); continue; }
                     var ps = method.GetParameters();
                     var sb = new StringBuilder();
