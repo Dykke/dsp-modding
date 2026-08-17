@@ -365,7 +365,7 @@ namespace DSPCalculatorPlus
                         + "belt and under-provisioned: [" + Join(stuck) + "]. Add extra output/input belts for these manually.");
                 if (!result)
                     DSPCalculatorPlusLog.Warn("[overflow] could not generate even after externalizing"
-                        + (stackRaised ? " + 4x belt-stacking" : "")
+                        + (stackRaised ? " + " + maxStack + "x belt-stacking" : "")
                         + " - a byproduct's belt demand still exceeds capacity at this scale. "
                         + "Reduce the target quantity, or split into multiple smaller blueprints"
                         + (stackRaised ? " (already at max " + maxStack + "x stacking)." : (Plugin.Config.PushBeltStackingOnOverflow.Value ? "." : ", or enable PushBeltStackingOnOverflow to try higher stacking.")));
