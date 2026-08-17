@@ -44,7 +44,8 @@ the same amount per tick, but the source never depletes.
 - **Gated debug log** - verbose diagnostic logging via the
   `Diagnostics.DebugLog` config toggle.
 
-## Installation
+<details>
+<summary><strong>Installation</strong></summary>
 
 **Via r2modman / Thunderstore Mod Manager (recommended):**
 1. Install [r2modman](https://thunderstore.io/package/ebkr/r2modman/) or the Thunderstore Mod Manager.
@@ -62,6 +63,8 @@ the same amount per tick, but the source never depletes.
    `BepInEx\config\com.zicarius.EndlessResources.cfg` with the
    defaults.
 5. (Optional) Edit that .cfg to taste.
+
+</details>
 
 ## Before you install
 
@@ -117,7 +120,8 @@ settings window.
   state is per-planet and the patches are per-tick - should work but
   is not confirmed.
 
-## Troubleshooting
+<details>
+<summary><strong>Troubleshooting</strong></summary>
 
 **Mod doesn't load:**
 - Ensure the file is in `BepInEx\plugins\EndlessResources\` (not `Mods\`).
@@ -132,6 +136,8 @@ settings window.
   patch...` rather than `not detected` - if it says "not detected"
   after the game has fully loaded, PlanetMinerFast likely isn't
   actually running, or its internal method signature changed.
+
+</details>
 
 ## License
 

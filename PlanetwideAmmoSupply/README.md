@@ -31,7 +31,8 @@ used. When you're not looking, your defenses stay loaded.
 - **Cheap** - a throttled scan (not every tick), so it stays light on UPS.
 - **Config-only** - no in-game UI; every setting lives in the BepInEx config file.
 
-## Installation
+<details>
+<summary><strong>Installation</strong></summary>
 
 **Via r2modman / Thunderstore Mod Manager (recommended):**
 1. Install [r2modman](https://thunderstore.io/package/ebkr/r2modman/) or the Thunderstore Mod Manager.
@@ -48,6 +49,8 @@ used. When you're not looking, your defenses stay loaded.
 4. Launch the game once. BepInEx creates
    `BepInEx\config\com.zicarius.PlanetwideAmmoSupply.cfg` with the defaults.
 5. (Optional) Edit that .cfg to taste - **with the game closed**, then relaunch.
+
+</details>
 
 ## Before you install
 
@@ -95,7 +98,8 @@ read at launch).
 - **Multiplayer:** built and tested for singleplayer; untested in Nebula
   multiplayer.
 
-## Troubleshooting
+<details>
+<summary><strong>Troubleshooting</strong></summary>
 
 **Mod doesn't load:**
 - Ensure the file is in `BepInEx\plugins\PlanetwideAmmoSupply\` (not `Mods\`).
@@ -111,6 +115,8 @@ read at launch).
   `nearestStation=` (how far your closest supplying station actually is).
 - Config edits only take effect on relaunch - change the .cfg with the
   game closed.
+
+</details>
 
 ## License
 
